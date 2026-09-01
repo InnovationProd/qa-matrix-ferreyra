@@ -41,42 +41,28 @@ export default function App(){
   useEffect(()=>{getSession().then(s=>{setSession(s);setAuthLoading(false);});const{data:l}=onAuthChange(s=>setSession(s));return()=>l?.subscription?.unsubscribe();},[]);
   // Load lineas once authenticated
   useEffect(()=>{if(session)fetchLineas().then(ls=>{setLineas(ls);if(ls.length>0&&!linea)setLinea(ls[0].id);}).catch(console.error);},[session]);
-  // Load defectos and latest giro when linea changes
+  const [latestGiro, setLatestGiro] = useState(null); // just metadata for home card
+
+  // Load defectos when linea changes, clear active giro, fetch latest giro metadata
   useEffect(()=>{
     if(!session||!linea)return;
     fetchDefectos(linea).then(setDefectos).catch(console.error);
-    // Auto-load the most recent giro so all users see the same one
-    fetchGiros(linea).then(gs=>{
-      if(gs.length>0){
-        fetchGiro(gs[0].id).then(g=>{
-          setResult({qaRows:g.qa_rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});
-          setGiroId(g.id);setGiroName(g.name);
-          fetchPdcas(g.id).then(setPdcaMap).catch(console.error);
-        }).catch(console.error);
-      } else {
-        setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
-      }
-    }).catch(console.error);
+    setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
+    // Fetch latest giro metadata (not full data) for the home card
+    fetchGiros(linea).then(gs=>setLatestGiro(gs.length>0?gs[0]:null)).catch(console.error);
   },[session,linea]);
 
-  // Realtime: refresh on any giro change (not just when on history page)
+  // Realtime: refresh latest giro metadata + history list
   useEffect(()=>{
     if(!session||!linea)return;
     const unsub=subscribeGiros(linea,()=>{
       fetchGiros(linea).then(gs=>{
+        setLatestGiro(gs.length>0?gs[0]:null);
         if(page==='history')setGiros(gs);
-        // If someone else created a newer giro, load it
-        if(gs.length>0&&gs[0].id!==giroId){
-          fetchGiro(gs[0].id).then(g=>{
-            setResult({qaRows:g.qa_rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});
-            setGiroId(g.id);setGiroName(g.name);
-            fetchPdcas(g.id).then(setPdcaMap).catch(console.error);
-          }).catch(console.error);
-        }
       }).catch(console.error);
     });
     return unsub;
-  },[session,linea,page,giroId]);
+  },[session,linea,page]);
   // Realtime: refresh PDCA when another user updates it
   useEffect(()=>{
     if(!giroId)return;
@@ -155,6 +141,7 @@ export default function App(){
       <div style={{marginBottom:32}}><LineSelector/></div>
       {linea&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,maxWidth:700,width:'100%'}}>
         {result&&<HC icon="📈" title="Giro Activo" desc={giroName} onClick={()=>setPage('matrix')} hl/>}
+        {!result&&latestGiro&&<HC icon="📂" title="Último Giro" desc={`${latestGiro.name} · ${latestGiro.date}`} onClick={()=>loadGiro(latestGiro.id)}/>}
         <HC icon="📊" title="Nuevo Giro" desc="Cargar Excel de SurveyMonkey" onClick={()=>setPage('upload')}/>
         <HC icon="📋" title="Historial" desc="Ver giros anteriores" onClick={loadHistory}/>
         <HC icon="⚙️" title="Defectos" desc="Editar severidad y costos" onClick={()=>setPage('defectos')}/>
