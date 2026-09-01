@@ -8,5 +8,4 @@ body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:#0F172A;color:#
 input:focus,textarea:focus,select:focus{outline:2px solid #F59E0B;outline-offset:-1px}
 button{font-family:inherit;cursor:pointer}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
 .fade-in{animation:fadeIn .4s ease-out both}

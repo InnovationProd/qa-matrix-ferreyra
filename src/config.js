@@ -1,4 +1,3 @@
-// 11 Detection points: 7 internal + 4 external, weights 2-22
 export const DETECTION_POINTS = [
   { key: 'Recepción', weight: 2, scope: 'int', label: 'Recep.' },
   { key: 'Autocontrol', weight: 4, scope: 'int', label: 'Autoc.' },
@@ -12,9 +11,8 @@ export const DETECTION_POINTS = [
   { key: 'TDF/TTV', weight: 20, scope: 'ext', label: 'TDF' },
   { key: 'Garantía', weight: 22, scope: 'ext', label: 'Gta.' },
 ];
-
 export const OCCURRENCE_TABLE = [
-  { pct: 0, occ: 1 }, { pct: 0.000001, occ: 2 }, { pct: 0.00001, occ: 3 },
-  { pct: 0.0001, occ: 4 }, { pct: 0.0005, occ: 5 }, { pct: 0.002, occ: 6 },
-  { pct: 0.01, occ: 7 }, { pct: 0.02, occ: 8 }, { pct: 0.05, occ: 9 }, { pct: 0.1, occ: 10 },
+  { pct: 0, occ: 1 },{ pct: 0.000001, occ: 2 },{ pct: 0.00001, occ: 3 },
+  { pct: 0.0001, occ: 4 },{ pct: 0.0005, occ: 5 },{ pct: 0.002, occ: 6 },
+  { pct: 0.01, occ: 7 },{ pct: 0.02, occ: 8 },{ pct: 0.05, occ: 9 },{ pct: 0.1, occ: 10 },
 ];
