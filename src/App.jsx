@@ -17,7 +17,6 @@ export default function App(){
   const[loginPass,setLoginPass]=useState('');
   const[lineas,setLineas]=useState([]);
   const[linea,setLinea]=useState(null);
-  const[giroClosed,setGiroClosed]=useState(false);
   const[page,setPage]=useState('home');
   const[result,setResult]=useState(null);
   const[giroId,setGiroId]=useState(null);
@@ -42,25 +41,18 @@ export default function App(){
   useEffect(()=>{getSession().then(s=>{setSession(s);setAuthLoading(false);});const{data:l}=onAuthChange(s=>setSession(s));return()=>l?.subscription?.unsubscribe();},[]);
   // Load lineas once authenticated
   useEffect(()=>{if(session)fetchLineas().then(ls=>{setLineas(ls);if(ls.length>0&&!linea)setLinea(ls[0].id);}).catch(console.error);},[session]);
-  const [latestGiro, setLatestGiro] = useState(null); // just metadata for home card
-
-  // Load defectos when linea changes, clear active giro, fetch latest giro metadata
+  // Load defectos when linea changes, clear active giro
   useEffect(()=>{
     if(!session||!linea)return;
     fetchDefectos(linea).then(setDefectos).catch(console.error);
-    setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});setGiroClosed(false);
-    // Fetch latest giro metadata (not full data) for the home card
-    fetchGiros(linea).then(gs=>setLatestGiro(gs.length>0?gs[0]:null)).catch(console.error);
+    setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
   },[session,linea]);
 
-  // Realtime: refresh latest giro metadata + history list
+  // Realtime: refresh history list when another user creates/deletes a giro
   useEffect(()=>{
     if(!session||!linea)return;
     const unsub=subscribeGiros(linea,()=>{
-      fetchGiros(linea).then(gs=>{
-        setLatestGiro(gs.length>0?gs[0]:null);
-        if(page==='history')setGiros(gs);
-      }).catch(console.error);
+      if(page==='history')fetchGiros(linea).then(setGiros).catch(console.error);
     });
     return unsub;
   },[session,linea,page]);
@@ -80,7 +72,7 @@ export default function App(){
   const handleProcess=useCallback(async()=>{
     if(!pendingFile)return;const b=parseInt(bancos);if(!b||b<1){setError('Ingresá la cantidad de bancos controlados');return;}
     setLoading(true);setError(null);
-    try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult(res);setGiroClosed(false);const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
+    try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult(res);const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
     try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0]},linea);if(saved?.id){setGiroId(saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
     setPage('matrix');}catch(err){setError(err.message);}setLoading(false);
   },[pendingFile,bancos,giroName,defectosDb,linea]);
@@ -106,7 +98,7 @@ export default function App(){
   const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
     // Recalculate notInDb flag against current defectos list
     const rows=g.qa_rows.map(r=>({...r,notInDb:!defectosDb[r.defectName]}));
-    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);setGiroClosed(false);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb]);
+    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb]);
   const handleDeleteGiro=useCallback(async(id,e)=>{e.stopPropagation();if(!confirm('¿Eliminar este giro?'))return;try{await deleteGiro(id);setGiros(prev=>prev.filter(g=>g.id!==id));}catch(err){alert('Error: '+err.message);}},[]);
 
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
@@ -147,7 +139,6 @@ export default function App(){
       <div style={{marginBottom:32}}><LineSelector/></div>
       {linea&&<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:16,maxWidth:700,width:'100%'}}>
         {result&&<HC icon="📈" title="Giro Activo" desc={giroName} onClick={()=>setPage('matrix')} hl/>}
-        {!result&&!giroClosed&&latestGiro&&<HC icon="📂" title="Último Giro" desc={`${latestGiro.name} · ${latestGiro.date}`} onClick={()=>loadGiro(latestGiro.id)}/>}
         <HC icon="📊" title="Nuevo Giro" desc="Cargar Excel de SurveyMonkey" onClick={()=>setPage('upload')}/>
         <HC icon="📋" title="Historial" desc="Ver giros anteriores" onClick={loadHistory}/>
         <HC icon="⚙️" title="Defectos" desc="Editar severidad y costos" onClick={()=>setPage('defectos')}/>
@@ -222,7 +213,7 @@ export default function App(){
       <div style={{background:'linear-gradient(135deg,#1E293B,#0F172A)',borderBottom:'1px solid #334155',padding:'14px 24px',position:'sticky',top:0,zIndex:50}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:1900,margin:'0 auto'}}>
           <div><div style={{fontSize:11,fontWeight:600,letterSpacing:3,color:'#F59E0B',textTransform:'uppercase'}}>WCM · Pilar Calidad · {linea}</div><h1 style={{fontSize:20,fontWeight:700,color:'#F8FAFC',margin:'2px 0 0'}}>{giroName||'Matriz QA'}</h1></div>
-          <div style={{display:'flex',gap:8}}><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setGiroName('');setPdcaMap({});setGiroId(null);setGiroClosed(true);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
+          <div style={{display:'flex',gap:8}}><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setGiroName('');setPdcaMap({});setGiroId(null);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
         </div>
       </div>
       <div style={{padding:'16px 24px',maxWidth:1900,margin:'0 auto'}}>
