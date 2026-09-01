@@ -102,7 +102,10 @@ export default function App(){
   },[defectos,occurrenceMap,linea]);
 
   const loadHistory=useCallback(async()=>{try{const g=await fetchGiros(linea);setGiros(g);}catch(e){console.error(e);}setPage('history');},[linea]);
-  const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);setResult({qaRows:g.qa_rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[]);
+  const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
+    // Recalculate notInDb flag against current defectos list
+    const rows=g.qa_rows.map(r=>({...r,notInDb:!defectosDb[r.defectName]}));
+    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb]);
   const handleDeleteGiro=useCallback(async(id,e)=>{e.stopPropagation();if(!confirm('¿Eliminar este giro?'))return;try{await deleteGiro(id);setGiros(prev=>prev.filter(g=>g.id!==id));}catch(err){alert('Error: '+err.message);}},[]);
 
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
