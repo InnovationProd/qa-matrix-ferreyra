@@ -41,11 +41,27 @@ export default function App(){
   useEffect(()=>{getSession().then(s=>{setSession(s);setAuthLoading(false);});const{data:l}=onAuthChange(s=>setSession(s));return()=>l?.subscription?.unsubscribe();},[]);
   // Load lineas once authenticated
   useEffect(()=>{if(session)fetchLineas().then(ls=>{setLineas(ls);if(ls.length>0&&!linea)setLinea(ls[0].id);}).catch(console.error);},[session]);
-  // Load defectos when linea changes, clear active giro
+  // Load defectos when linea changes, restore active giro from localStorage
   useEffect(()=>{
     if(!session||!linea)return;
     fetchDefectos(linea).then(setDefectos).catch(console.error);
-    setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
+    // Check if there's a saved active giro for this linea
+    const savedId=localStorage.getItem(`activeGiro_${linea}`);
+    if(savedId){
+      fetchGiro(savedId).then(g=>{
+        const pd=fetchPdcas(g.id);
+        const rows=g.qa_rows.map(r=>({...r}));
+        setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});
+        setGiroId(g.id);setGiroName(g.name);
+        pd.then(setPdcaMap).catch(console.error);
+      }).catch(()=>{
+        // Giro was deleted, clean up
+        localStorage.removeItem(`activeGiro_${linea}`);
+        setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
+      });
+    } else {
+      setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
+    }
   },[session,linea]);
 
   // Realtime: refresh history list when another user creates/deletes a giro
@@ -73,7 +89,7 @@ export default function App(){
     if(!pendingFile)return;const b=parseInt(bancos);if(!b||b<1){setError('Ingresá la cantidad de bancos controlados');return;}
     setLoading(true);setError(null);
     try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult(res);const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
-    try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0]},linea);if(saved?.id){setGiroId(saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
+    try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0]},linea);if(saved?.id){setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
     setPage('matrix');}catch(err){setError(err.message);}setLoading(false);
   },[pendingFile,bancos,giroName,defectosDb,linea]);
 
@@ -98,7 +114,7 @@ export default function App(){
   const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
     // Recalculate notInDb flag against current defectos list
     const rows=g.qa_rows.map(r=>({...r,notInDb:!defectosDb[r.defectName]}));
-    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb]);
+    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);localStorage.setItem(`activeGiro_${linea}`,id);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb,linea]);
   const handleDeleteGiro=useCallback(async(id,e)=>{e.stopPropagation();if(!confirm('¿Eliminar este giro?'))return;try{await deleteGiro(id);setGiros(prev=>prev.filter(g=>g.id!==id));}catch(err){alert('Error: '+err.message);}},[]);
 
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
@@ -213,7 +229,7 @@ export default function App(){
       <div style={{background:'linear-gradient(135deg,#1E293B,#0F172A)',borderBottom:'1px solid #334155',padding:'14px 24px',position:'sticky',top:0,zIndex:50}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:1900,margin:'0 auto'}}>
           <div><div style={{fontSize:11,fontWeight:600,letterSpacing:3,color:'#F59E0B',textTransform:'uppercase'}}>WCM · Pilar Calidad · {linea}</div><h1 style={{fontSize:20,fontWeight:700,color:'#F8FAFC',margin:'2px 0 0'}}>{giroName||'Matriz QA'}</h1></div>
-          <div style={{display:'flex',gap:8}}><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setGiroName('');setPdcaMap({});setGiroId(null);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
+          <div style={{display:'flex',gap:8}}><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setGiroName('');setPdcaMap({});setGiroId(null);if(linea)localStorage.removeItem(`activeGiro_${linea}`);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
         </div>
       </div>
       <div style={{padding:'16px 24px',maxWidth:1900,margin:'0 auto'}}>
