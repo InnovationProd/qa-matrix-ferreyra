@@ -117,6 +117,9 @@ export default function App(){
     setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);localStorage.setItem(`activeGiro_${linea}`,id);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb,linea]);
   const handleDeleteGiro=useCallback(async(id,e)=>{e.stopPropagation();if(!confirm('¿Eliminar este giro?'))return;try{await deleteGiro(id);setGiros(prev=>prev.filter(g=>g.id!==id));}catch(err){alert('Error: '+err.message);}},[]);
 
+  const handlePrint=useCallback(()=>{setFilter('AA');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
+  const handlePrintAll=useCallback(()=>{setFilter('ALL');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
+
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
 
   const filteredRows=useMemo(()=>{if(!result)return[];let r=result.qaRows;if(filter!=='ALL')r=r.filter(x=>x.voz===filter);if(search){const s=search.toLowerCase();r=r.filter(x=>x.concat.toLowerCase().includes(s)||x.component.toLowerCase().includes(s));}return r;},[result,filter,search]);
@@ -222,16 +225,6 @@ export default function App(){
   );
 
   // ── MATRIX ──
-  const handlePrint=useCallback(()=>{
-    setFilter('AA');setSelectedRow(null);
-    setTimeout(()=>window.print(),300);
-  },[]);
-
-  const handlePrintAll=useCallback(()=>{
-    setFilter('ALL');setSelectedRow(null);
-    setTimeout(()=>window.print(),300);
-  },[]);
-
   if(!result)return null;
   const{summary,totalRecords,totalDefectTypes,bancosControlados,totalDefects}=result;
   return(
