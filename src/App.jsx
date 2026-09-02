@@ -27,6 +27,9 @@ export default function App(){
   const[search,setSearch]=useState('');
   const[selectedRow,setSelectedRow]=useState(null);
   const[bancos,setBancos]=useState('');
+  const[piezasTotales,setPiezasTotales]=useState('');
+  const[diasTrabajados,setDiasTrabajados]=useState('');
+  const[piezasEntregadas,setPiezasEntregadas]=useState('');
   const[pendingFile,setPendingFile]=useState(null);
   const[pdcaMap,setPdcaMap]=useState({});
   const[defectos,setDefectos]=useState([]);
@@ -51,7 +54,7 @@ export default function App(){
       fetchGiro(savedId).then(g=>{
         const pd=fetchPdcas(g.id);
         const rows=g.qa_rows.map(r=>({...r}));
-        setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});
+        setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format,piezasTotales:g.piezas_totales,diasTrabajados:g.dias_trabajados,piezasEntregadas:g.piezas_entregadas});
         setGiroId(g.id);setGiroName(g.name);
         pd.then(setPdcaMap).catch(console.error);
       }).catch(()=>{
@@ -86,12 +89,16 @@ export default function App(){
   const handleLogout=useCallback(async()=>{await signOut();setSession(null);setPage('home');},[]);
   const handleFileDrop=useCallback((f)=>{if(!f)return;setPendingFile(f);setError(null);setResult(null);setPage('upload');},[]);
   const handleProcess=useCallback(async()=>{
-    if(!pendingFile)return;const b=parseInt(bancos);if(!b||b<1){setError('Ingresá la cantidad de bancos controlados');return;}
+    if(!pendingFile)return;
+    const b=parseInt(bancos);if(!b||b<1){setError('Ingresá la cantidad de bancos controlados');return;}
+    const pt=parseInt(piezasTotales);if(!pt||pt<1){setError('Ingresá la cantidad de piezas totales producidas');return;}
+    const dt=parseInt(diasTrabajados);if(!dt||dt<1){setError('Ingresá los días trabajados');return;}
+    const pe=parseInt(piezasEntregadas);if(!pe||pe<1){setError('Ingresá la cantidad de piezas entregadas al cliente');return;}
     setLoading(true);setError(null);
-    try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult(res);const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
-    try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0]},linea);if(saved?.id){setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
+    try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult({...res,piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe});const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
+    try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0],piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);if(saved?.id){setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
     setPage('matrix');}catch(err){setError(err.message);}setLoading(false);
-  },[pendingFile,bancos,giroName,defectosDb,linea]);
+  },[pendingFile,bancos,piezasTotales,diasTrabajados,piezasEntregadas,giroName,defectosDb,linea]);
 
   const handlePdca=useCallback(async(vn,field,val)=>{setPdcaMap(prev=>{const cur=prev[vn]||{responsable:'',plan:false,do_step:false,check:false,act:false,comments:''};const up={...cur,[field]:val};if(giroId)savePdca(giroId,vn,up).catch(()=>{});return{...prev,[vn]:up};});},[giroId]);
   const handleUnify=useCallback(async(destNum,origenInput)=>{const origenNums=origenInput.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n!==destNum);if(origenNums.length===0)return;const newRows=unifyVoices([...result.qaRows],destNum,origenNums);const totalDef=newRows.reduce((s,r)=>s+r.cantDefectos,0);const newSummary={AA:newRows.filter(r=>r.voz==='AA').length,A:newRows.filter(r=>r.voz==='A').length,B:newRows.filter(r=>r.voz==='B').length,C:newRows.filter(r=>r.voz==='C').length};setResult(prev=>({...prev,qaRows:newRows,totalDefectTypes:newRows.length,totalDefects:totalDef,summary:newSummary}));if(giroId){try{await updateGiroRows(giroId,newRows,newSummary);for(const o of origenNums)await saveUnificacion(giroId,destNum,o);}catch(e){console.warn(e);}}setUnifyTarget(null);setSelectedRow(null);},[result,giroId]);
@@ -114,7 +121,7 @@ export default function App(){
   const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
     // Recalculate notInDb flag against current defectos list
     const rows=g.qa_rows.map(r=>({...r,notInDb:!defectosDb[r.defectName]}));
-    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);localStorage.setItem(`activeGiro_${linea}`,id);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb,linea]);
+    setResult({qaRows:rows,totalRecords:g.total_records,totalDefectTypes:g.total_defect_types,bancosControlados:g.bancos_controlados,totalDefects:g.total_defects,summary:g.summary,format:g.format,piezasTotales:g.piezas_totales,diasTrabajados:g.dias_trabajados,piezasEntregadas:g.piezas_entregadas});setGiroId(id);setGiroName(g.name);setPdcaMap(pd);localStorage.setItem(`activeGiro_${linea}`,id);setPage('matrix');}catch(e){alert('Error: '+e.message);}setLoading(false);},[defectosDb,linea]);
   const handleDeleteGiro=useCallback(async(id,e)=>{e.stopPropagation();if(!confirm('¿Eliminar este giro?'))return;try{await deleteGiro(id);setGiros(prev=>prev.filter(g=>g.id!==id));}catch(err){alert('Error: '+err.message);}},[]);
 
   const handlePrint=useCallback(()=>{setFilter('AA');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
@@ -124,6 +131,26 @@ export default function App(){
 
   const filteredRows=useMemo(()=>{if(!result)return[];let r=result.qaRows;if(filter!=='ALL')r=r.filter(x=>x.voz===filter);if(search){const s=search.toLowerCase();r=r.filter(x=>x.concat.toLowerCase().includes(s)||x.component.toLowerCase().includes(s));}return r;},[result,filter,search]);
   const pareto=useMemo(()=>{if(!result)return[];const m={};for(const r of result.qaRows)m[r.component]=(m[r.component]||0)+r.cantDefectos;return Object.entries(m).sort((a,b)=>b[1]-a[1]);},[result]);
+
+  const wcmKpis=useMemo(()=>{
+    if(!result||!result.piezasTotales)return null;
+    const {piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe,totalDefects:defTotal,bancosControlados:bc,qaRows}=result;
+    // Sum actual detection counts per point across all rows
+    const dpTotals={};
+    for(const r of qaRows){for(const[k,v] of Object.entries(r.dpCounts||{}))dpTotals[k]=(dpTotals[k]||0)+v;}
+    const defAntena=dpTotals['Antena']||0;
+    const defCustomerPPM=(dpTotals['SCA']||0)+(dpTotals['TDF/TTV']||0)+(dpTotals['Garantía']||0);
+    const defIPPM=dpTotals['IPPM']||0;
+
+    const fpy=pt>0?((pt-defTotal)/pt*100):null;
+    const rework=pt>0?(defTotal/pt*100):null;
+    const dppm=pe>0?(defAntena/pe*1000000):null;
+    const custPpm=pe>0?(defCustomerPPM/pe*1000000):null;
+    const ippm=bc>0?(defIPPM/bc*1000000):null;
+    const piezasDia=dt>0?(pt/dt):null;
+
+    return{fpy,rework,dppm,custPpm,ippm,piezasDia,defAntena,defCustomerPPM,defIPPM};
+  },[result]);
 
   const th={padding:'8px 5px',textAlign:'center',color:'#94A3B8',fontWeight:600,fontSize:10,textTransform:'uppercase',borderBottom:'2px solid #334155',whiteSpace:'nowrap',position:'sticky',top:0,background:'#1E293B',zIndex:10};
   const td={padding:'6px 5px',textAlign:'center',whiteSpace:'nowrap',fontSize:11};
@@ -179,7 +206,12 @@ export default function App(){
         <div style={{width:'100%',maxWidth:520,background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'1px solid #334155'}}>
           <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:24}}><span style={{fontSize:32}}>📄</span><div><div style={{fontWeight:600,color:'#F8FAFC'}}>{pendingFile.name}</div><div style={{color:'#64748B',fontSize:12}}>{(pendingFile.size/1024).toFixed(0)} KB</div></div><button onClick={()=>setPendingFile(null)} style={{marginLeft:'auto',background:'none',border:'none',color:'#64748B',cursor:'pointer',fontSize:18}}>✕</button></div>
           <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Nombre del giro</span><input value={giroName} onChange={e=>setGiroName(e.target.value)} placeholder={`Giro ${new Date().toLocaleDateString('es-AR')}`} style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
-          <label style={{display:'block',marginBottom:24}}><span style={{fontSize:12,fontWeight:600,color:'#F59E0B',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Bancos controlados *</span><input type="number" min="1" value={bancos} onChange={e=>setBancos(e.target.value)} placeholder="Ej: 5000" style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #F59E0B',background:'#1E293B',color:'#F8FAFC',fontSize:16,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/><span style={{fontSize:11,color:'#64748B',marginTop:4,display:'block'}}>Cantidad de bancos producidos en el período</span></label>
+          <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#F59E0B',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Bancos controlados *</span><input type="number" min="1" value={bancos} onChange={e=>setBancos(e.target.value)} placeholder="Ej: 5000" style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #F59E0B',background:'#1E293B',color:'#F8FAFC',fontSize:16,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/><span style={{fontSize:11,color:'#64748B',marginTop:4,display:'block'}}>Piezas individuales controladas (usado para IPPM)</span></label>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+            <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6}}>Piezas totales producidas *</span><input type="number" min="1" value={piezasTotales} onChange={e=>setPiezasTotales(e.target.value)} placeholder="Ej: 4800" style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+            <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6}}>Días trabajados *</span><input type="number" min="1" value={diasTrabajados} onChange={e=>setDiasTrabajados(e.target.value)} placeholder="Ej: 20" style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+          </div>
+          <label style={{display:'block',marginBottom:24}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6}}>Piezas entregadas al cliente *</span><input type="number" min="1" value={piezasEntregadas} onChange={e=>setPiezasEntregadas(e.target.value)} placeholder="Ej: 4750" style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/><span style={{fontSize:11,color:'#64748B',marginTop:4,display:'block'}}>Usado para Customer DPPM y PPM</span></label>
           <Btn onClick={handleProcess} disabled={loading} bg={loading?'#475569':'#F59E0B'} color="#0F172A" style={{width:'100%',padding:12,fontSize:15}}>{loading?'Generando...':'Generar Matriz QA'}</Btn>
         </div>
       )}
@@ -232,13 +264,32 @@ export default function App(){
       <div className="print-header" style={{background:'linear-gradient(135deg,#1E293B,#0F172A)',borderBottom:'1px solid #334155',padding:'14px 24px',position:'sticky',top:0,zIndex:50}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:1900,margin:'0 auto'}}>
           <div><div style={{fontSize:11,fontWeight:600,letterSpacing:3,color:'#F59E0B',textTransform:'uppercase'}}>WCM · Pilar Calidad · {linea}</div><h1 style={{fontSize:20,fontWeight:700,color:'#F8FAFC',margin:'2px 0 0'}}>{giroName||'Matriz QA'}</h1></div>
-          <div style={{display:'flex',gap:8}} className="no-print"><Btn onClick={handlePrint} bg="#1D4ED8" color="#fff">🖨️ Imprimir AA</Btn><Btn onClick={handlePrintAll} bg="#1D4ED8" color="#fff" style={{fontSize:11}}>🖨️ Todas</Btn><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setGiroName('');setPdcaMap({});setGiroId(null);if(linea)localStorage.removeItem(`activeGiro_${linea}`);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
+          <div style={{display:'flex',gap:8}} className="no-print"><Btn onClick={handlePrint} bg="#1D4ED8" color="#fff">🖨️ Imprimir AA</Btn><Btn onClick={handlePrintAll} bg="#1D4ED8" color="#fff" style={{fontSize:11}}>🖨️ Todas</Btn><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setPiezasTotales('');setDiasTrabajados('');setPiezasEntregadas('');setGiroName('');setPdcaMap({});setGiroId(null);if(linea)localStorage.removeItem(`activeGiro_${linea}`);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
         </div>
       </div>
       <div style={{padding:'16px 24px',maxWidth:1900,margin:'0 auto'}}>
         <div className="fade-in" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:16}}>
           {[{l:'Registros',v:totalRecords,i:'📋'},{l:'Bancos',v:bancosControlados.toLocaleString(),i:'🏭'},{l:'Defectos',v:totalDefects,i:'🔍'},{l:'Tipos',v:totalDefectTypes,i:'📊'},{l:'AA',v:summary.AA,c:VC.AA,i:'🔴'},{l:'A',v:summary.A,c:VC.A,i:'🟠'},{l:'B',v:summary.B,c:VC.B,i:'🟡'},{l:'C',v:summary.C,c:VC.C,i:'🟢'},notInDbCount>0?{l:'Sin registro',v:notInDbCount,c:'#D97706',i:'⚠️'}:null].filter(Boolean).map((k,i)=>(<div key={i} className="print-kpi" style={{background:'#1E293B',borderRadius:10,padding:'10px 12px',border:'1px solid #334155'}}><div style={{fontSize:10,color:'#94A3B8',marginBottom:3}}>{k.i} {k.l}</div><div style={{fontSize:22,fontWeight:700,color:k.c||'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{k.v}</div></div>))}
         </div>
+
+        {wcmKpis?(
+          <div style={{background:'#1E293B',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #334155'}}>
+            <h3 style={{fontSize:12,fontWeight:600,color:'#F59E0B',margin:'0 0 10px',textTransform:'uppercase',letterSpacing:1}}>Indicadores WCM {result.piezasTotales?`· ${result.piezasTotales.toLocaleString()} pzs · ${result.diasTrabajados} días · ${result.piezasEntregadas.toLocaleString()} entregadas`:''}</h3>
+            <div className="fade-in" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
+              <WcmCard label="FPY (First Pass Yield)" value={wcmKpis.fpy!=null?`${wcmKpis.fpy.toFixed(2)}%`:'—'} color={wcmKpis.fpy>=95?'#16A34A':wcmKpis.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo" />
+              <WcmCard label="Rework Rate" value={wcmKpis.rework!=null?`${wcmKpis.rework.toFixed(2)}%`:'—'} color={wcmKpis.rework<=5?'#16A34A':wcmKpis.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo" />
+              <WcmCard label="Scrap Rate" value="N/D" color="#475569" sub="Pendiente de vincular" />
+              <WcmCard label="Customer DPPM" value={wcmKpis.dppm!=null?Math.round(wcmKpis.dppm).toLocaleString():'—'} color="#F59E0B" sub={`Antena: ${wcmKpis.defAntena} defectos`} />
+              <WcmCard label="Customer PPM" value={wcmKpis.custPpm!=null?Math.round(wcmKpis.custPpm).toLocaleString():'—'} color="#F59E0B" sub={`SCA+TDF+Gtía: ${wcmKpis.defCustomerPPM}`} />
+              <WcmCard label="Internal PPM" value={wcmKpis.ippm!=null?Math.round(wcmKpis.ippm).toLocaleString():'—'} color="#38BDF8" sub={`IPPM: ${wcmKpis.defIPPM} defectos`} />
+              <WcmCard label="COPQ" value="N/D" color="#475569" sub="Gestión aparte" />
+            </div>
+          </div>
+        ):(
+          <div className="no-print" style={{background:'#1E293B',borderRadius:10,padding:'10px 14px',marginBottom:16,border:'1px dashed #334155',fontSize:12,color:'#64748B'}}>
+            ℹ️ Este giro no tiene datos de piezas totales / entregadas cargados — los indicadores WCM (FPY, PPM, etc.) no están disponibles. Se piden al generar un giro nuevo.
+          </div>
+        )}
         <div style={{background:'#1E293B',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #334155'}}><h3 style={{fontSize:12,fontWeight:600,color:'#F59E0B',margin:'0 0 10px',textTransform:'uppercase',letterSpacing:1}}>Pareto</h3><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{pareto.slice(0,10).map(([c,n],i)=>{const p=(n/totalDefects*100).toFixed(1);return(<div key={i} style={{flex:'1 1 auto',minWidth:100,background:'#0F172A',borderRadius:6,padding:'6px 10px',border:'1px solid #334155'}}><div style={{fontSize:10,color:'#94A3B8'}}>{c}</div><div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:18,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{n}</span><span style={{fontSize:10,color:'#64748B'}}>{p}%</span></div><div style={{height:2,background:'#334155',borderRadius:1,marginTop:3}}><div style={{height:'100%',width:`${Math.min(+p,100)}%`,background:'#F59E0B',borderRadius:1}}/></div></div>);})}</div></div>
         <div className="no-print" style={{display:'flex',gap:6,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
           {['ALL','AA','A','B','C'].map(f=><Btn key={f} onClick={()=>setFilter(f)} bg={filter===f?(f==='ALL'?'#F59E0B':VC[f]):'#334155'} color={filter===f?'#0F172A':'#94A3B8'} style={{padding:'5px 12px',fontSize:12}}>{f==='ALL'?'Todas':f} ({f==='ALL'?totalDefectTypes:summary[f]})</Btn>)}
@@ -274,3 +325,4 @@ export default function App(){
 
 function HC({icon,title,desc,onClick,hl}){return<div onClick={onClick} style={{background:hl?'#1E3A5F':'#1E293B',borderRadius:16,padding:'32px 24px',border:`1px solid ${hl?'#F59E0B':'#334155'}`,cursor:'pointer',textAlign:'center',transition:'border-color .2s'}} onMouseEnter={e=>e.currentTarget.style.borderColor='#F59E0B'} onMouseLeave={e=>e.currentTarget.style.borderColor=hl?'#F59E0B':'#334155'}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontWeight:700,color:'#F8FAFC',fontSize:18,marginBottom:4}}>{title}</div><div style={{color:hl?'#F59E0B':'#64748B',fontSize:13}}>{desc}</div></div>;}
 function Dt({l,v,m,h}){return<div><div style={{fontSize:9,color:'#64748B',textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontWeight:600,color:h?'#F59E0B':'#F8FAFC',fontFamily:m?"'IBM Plex Mono',monospace":'inherit',fontSize:m?11:12}}>{v}</div></div>;}
+function WcmCard({label,value,color,sub}){return<div className="print-kpi" style={{background:'#0F172A',borderRadius:8,padding:'10px 12px',border:'1px solid #334155'}}><div style={{fontSize:10,color:'#94A3B8',marginBottom:4}}>{label}</div><div style={{fontSize:20,fontWeight:700,color,fontFamily:"'IBM Plex Mono'"}}>{value}</div><div style={{fontSize:9,color:'#64748B',marginTop:2}}>{sub}</div></div>;}

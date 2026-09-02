@@ -35,7 +35,7 @@ export async function processExcelFile(file, bancosCtrl, defectosDb) {
     let hasI=false,hasE=false;for(const dp of DETECTION_POINTS){if(g.dps[dp.key]>0){if(dp.scope==='int')hasI=true;else hasE=true;}}
     const costo=(hasI&&hasE)?Math.max(db.costo_interno,db.costo_externo):hasE?db.costo_externo:db.costo_interno;
     const pct=g.count/bancos,occ=calcOcc(pct);let det=0;const dpB={};for(const dp of DETECTION_POINTS){if(g.dps[dp.key]>0){det+=dp.weight;dpB[dp.key]=dp.weight;}}if(det===0)det=4;
-    qaRows.push({concat:`${g.def} en el sector ${g.quad} del modelo ${g.model}`,defectName:g.def,model:g.model,quadrant:g.quad,component:g.comp,severidad:sev,cantDefectos:g.count,ocurrenciaPct:pct,ocurrencia:occ,detectabilidad:det,dpBreakdown:dpB,costo,costoInterno:db.costo_interno,costoExterno:db.costo_externo,index:sev*occ*det*costo,notInDb:!dbMatch});
+    qaRows.push({concat:`${g.def} en el sector ${g.quad} del modelo ${g.model}`,defectName:g.def,model:g.model,quadrant:g.quad,component:g.comp,severidad:sev,cantDefectos:g.count,ocurrenciaPct:pct,ocurrencia:occ,detectabilidad:det,dpBreakdown:dpB,dpCounts:{...g.dps},costo,costoInterno:db.costo_interno,costoExterno:db.costo_externo,index:sev*occ*det*costo,notInDb:!dbMatch});
   }
   qaRows.sort((a,b)=>b.index-a.index);
   const totalDef=qaRows.reduce((s,r)=>s+r.cantDefectos,0),totalIdx=qaRows.reduce((s,r)=>s+r.index,0);
