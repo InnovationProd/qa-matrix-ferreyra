@@ -94,6 +94,9 @@ export default function App(){
   },[giroId]);
 
   const defectosDb=useMemo(()=>{const m={};for(const d of defectos)m[d.nombre]={severidad:d.severidad,costo_interno:d.costo_interno,costo_externo:d.costo_externo};return m;},[defectos]);
+  const defectosParsed=useMemo(()=>defectos.map(d=>{const idx=d.nombre.indexOf(' - ');return{...d,componenteParsed:idx===-1?d.nombre:d.nombre.slice(0,idx).trim(),defectoParte:idx===-1?'':d.nombre.slice(idx+3).trim()};}),[defectos]);
+  const componentesUnicos=useMemo(()=>[...new Set(defectosParsed.map(d=>d.componenteParsed))].sort((a,b)=>a.localeCompare(b)),[defectosParsed]);
+  const defectosPorComponente=useCallback((comp)=>defectosParsed.filter(d=>d.componenteParsed===comp).sort((a,b)=>a.defectoParte.localeCompare(b.defectoParte)),[defectosParsed]);
   const occurrenceMap=useMemo(()=>{if(!result)return{};const m={};for(const r of result.qaRows)m[r.defectName]=(m[r.defectName]||0)+r.cantDefectos;return m;},[result]);
 
   const handleLogin=useCallback(async(e)=>{e.preventDefault();setAuthError('');try{await signIn(loginEmail,loginPass);}catch(err){setAuthError(err.message||'Credenciales incorrectas');}},[loginEmail,loginPass]);
@@ -139,9 +142,15 @@ export default function App(){
   const handlePrintAll=useCallback(()=>{setFilter('ALL');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
 
   const openScrapForm=useCallback((prefill)=>{
+    let comp=prefill?.componente||'',defParte='';
+    if(prefill?.defectoNombre){
+      const idx=prefill.defectoNombre.indexOf(' - ');
+      comp=idx===-1?prefill.defectoNombre:prefill.defectoNombre.slice(0,idx).trim();
+      defParte=idx===-1?'':prefill.defectoNombre.slice(idx+3).trim();
+    }
     setScrapForm({
       giroId:prefill?.giroId||null,vozNum:prefill?.vozNum||null,
-      defectoNombre:prefill?.defectoNombre||'',componente:prefill?.componente||'',
+      componente:comp,defectoParte:defParte,
       fecha:new Date().toISOString().split('T')[0],turno:'A',origen:'Producción',destino:'Scrap',
       tipoMaterial:'Cuenta Plena',cantidad:1,costoUnitario:'',notas:'',
     });
@@ -149,12 +158,14 @@ export default function App(){
   },[]);
   const handleSaveScrap=useCallback(async()=>{
     if(!scrapForm)return;
-    if(!scrapForm.defectoNombre){alert('Ingresá el nombre del defecto/parte');return;}
+    if(!scrapForm.componente){alert('Seleccioná el componente');return;}
+    if(!scrapForm.defectoParte){alert('Seleccioná el defecto');return;}
     const cant=parseInt(scrapForm.cantidad);const costo=parseFloat(scrapForm.costoUnitario);
     if(!cant||cant<1){alert('Ingresá una cantidad válida');return;}
     if(isNaN(costo)||costo<0){alert('Ingresá un costo unitario válido');return;}
+    const defectoNombre=`${scrapForm.componente} - ${scrapForm.defectoParte}`;
     try{
-      await saveScrapEvento({...scrapForm,cantidad:cant,costoUnitario:costo},linea);
+      await saveScrapEvento({...scrapForm,defectoNombre,cantidad:cant,costoUnitario:costo},linea);
       const fresh=await fetchScrapEventos(linea);setScrapEventos(fresh);
       setScrapForm(null);
     }catch(e){alert('Error: '+e.message);}
@@ -218,7 +229,7 @@ export default function App(){
     const totalAllUSD=Object.values(porDestino).reduce((a,b)=>a+b,0);
     // Top 5 by part (defecto+componente) - USD and Cantidad, scrap only
     const byPart={};
-    for(const e of scrapOnly){const key=`${e.componente?e.componente+' - ':''}${e.defecto_nombre}`;if(!byPart[key])byPart[key]={usd:0,qty:0};byPart[key].usd+=Number(e.monto||0);byPart[key].qty+=e.cantidad;}
+    for(const e of scrapOnly){const key=e.defecto_nombre;if(!byPart[key])byPart[key]={usd:0,qty:0};byPart[key].usd+=Number(e.monto||0);byPart[key].qty+=e.cantidad;}
     const top5USD=Object.entries(byPart).sort((a,b)=>b[1].usd-a[1].usd).slice(0,5);
     const top5Qty=Object.entries(byPart).sort((a,b)=>b[1].qty-a[1].qty).slice(0,5);
     // Modo de falla (defecto_nombre only) - USD and Cantidad
@@ -350,8 +361,8 @@ export default function App(){
         <div style={{background:'#1E293B',borderRadius:12,padding:20,marginBottom:20,border:'2px solid #F59E0B'}}>
           <h3 style={{fontSize:14,fontWeight:600,color:'#F59E0B',marginBottom:14,textTransform:'uppercase',letterSpacing:1}}>Nuevo registro de resolución</h3>
           <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:14}}>
-            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Defecto / Parte *</label><input value={scrapForm.defectoNombre} onChange={e=>setScrapForm(p=>({...p,defectoNombre:e.target.value}))} placeholder="Ej: Funda - Quemada" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
-            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Componente</label><input value={scrapForm.componente} onChange={e=>setScrapForm(p=>({...p,componente:e.target.value}))} placeholder="Ej: Funda" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
+            <div><label style={{fontSize:11,color:'#F59E0B',display:'block',marginBottom:4}}>Componente *</label><select value={scrapForm.componente} onChange={e=>setScrapForm(p=>({...p,componente:e.target.value,defectoParte:''}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #F59E0B',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Seleccionar...</option>{componentesUnicos.map(c=><option key={c} value={c}>{c}</option>)}</select>{componentesUnicos.length===0&&<span style={{fontSize:10,color:'#DC2626',display:'block',marginTop:3}}>Sin defectos cargados para {linea}</span>}</div>
+            <div><label style={{fontSize:11,color:'#F59E0B',display:'block',marginBottom:4}}>Defecto *</label><select value={scrapForm.defectoParte} onChange={e=>setScrapForm(p=>({...p,defectoParte:e.target.value}))} disabled={!scrapForm.componente} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #F59E0B',background:scrapForm.componente?'#0F172A':'#1E293B',color:'#F8FAFC',fontSize:13,opacity:scrapForm.componente?1:0.5}}><option value="">Seleccionar...</option>{defectosPorComponente(scrapForm.componente).map(d=><option key={d.id} value={d.defectoParte}>{d.defectoParte}</option>)}</select></div>
             <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Fecha</label><input type="date" value={scrapForm.fecha} onChange={e=>setScrapForm(p=>({...p,fecha:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
             <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Turno</label><select value={scrapForm.turno} onChange={e=>setScrapForm(p=>({...p,turno:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{TURNOS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
             <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Origen</label><select value={scrapForm.origen} onChange={e=>setScrapForm(p=>({...p,origen:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{ORIGENES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
@@ -426,7 +437,7 @@ export default function App(){
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
           <thead><tr style={{background:'#1E293B'}}><th style={th}>Fecha</th><th style={th}>Turno</th><th style={{...th,textAlign:'left'}}>Defecto</th><th style={th}>Origen</th><th style={th}>Destino</th><th style={th}>Material</th><th style={th}>Cant.</th><th style={th}>Costo U.</th><th style={th}>Monto</th><th style={th}>Giro</th><th style={th}>—</th></tr></thead>
           <tbody>{scrapFiltered.map((e,i)=>(<tr key={e.id} style={{background:i%2===0?'#0F172A':'#131C2E',borderBottom:'1px solid #1E293B'}}>
-            <td style={td}>{e.fecha}</td><td style={td}>{e.turno||'—'}</td><td style={{...td,textAlign:'left'}}>{e.componente?`${e.componente} - `:''}{e.defecto_nombre}</td><td style={td}>{e.origen||'—'}</td>
+            <td style={td}>{e.fecha}</td><td style={td}>{e.turno||'—'}</td><td style={{...td,textAlign:'left'}}>{e.defecto_nombre}</td><td style={td}>{e.origen||'—'}</td>
             <td style={td}><span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,background:DESTINO_COLORS[e.destino]||'#334155',color:'#fff'}}>{e.destino}</span></td>
             <td style={td}>{e.tipo_material||'—'}</td><td style={{...td,fontWeight:700}}>{e.cantidad}</td><td style={td}>${Number(e.costo_unitario).toFixed(2)}</td><td style={{...td,fontWeight:700,color:'#F59E0B',fontFamily:"'IBM Plex Mono'"}}>${Number(e.monto).toFixed(2)}</td>
             <td style={td}>{e.giro_id?'✓':'—'}</td><td style={td}><button onClick={()=>handleDeleteScrap(e.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:13}}>🗑️</button></td>
