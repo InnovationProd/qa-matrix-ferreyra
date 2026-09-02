@@ -9,3 +9,44 @@ input:focus,textarea:focus,select:focus{outline:2px solid #F59E0B;outline-offset
 button{font-family:inherit;cursor:pointer}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .fade-in{animation:fadeIn .4s ease-out both}
+
+/* ═══ PRINT STYLES — A3 Landscape ═══ */
+@media print {
+  @page { size: A3 landscape; margin: 10mm; }
+  body { background: #fff !important; color: #000 !important; font-size: 9pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Hide non-printable elements */
+  .no-print, .no-print * { display: none !important; }
+  /* Reset dark theme for print */
+  div, td, th, tr, table, span, p, h1, h2, h3, label, input, textarea, button {
+    background: transparent !important; color: #000 !important; border-color: #ccc !important;
+    box-shadow: none !important; text-shadow: none !important;
+  }
+  /* KPI cards */
+  .print-kpi { border: 1px solid #999 !important; padding: 6px 10px !important; border-radius: 4px !important; }
+  .print-kpi div:last-child { color: #000 !important; }
+  /* Voice badges keep color */
+  .voz-badge { color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .voz-badge[data-voz="AA"] { background: #DC2626 !important; }
+  .voz-badge[data-voz="A"] { background: #EA580C !important; }
+  .voz-badge[data-voz="B"] { background: #CA8A04 !important; }
+  .voz-badge[data-voz="C"] { background: #16A34A !important; }
+  /* Table */
+  table { border-collapse: collapse !important; width: 100% !important; font-size: 8pt !important; }
+  th { background: #f0f0f0 !important; color: #000 !important; font-size: 7pt !important; padding: 4px 3px !important; border: 1px solid #ccc !important; position: static !important; }
+  td { padding: 3px !important; border: 1px solid #ddd !important; font-size: 8pt !important; }
+  tr:nth-child(even) { background: #f9f9f9 !important; }
+  /* Index column stays gold */
+  .print-index { color: #B45309 !important; font-weight: 700 !important; }
+  /* Detection points with values */
+  .dp-int { color: #0369A1 !important; }
+  .dp-ext { color: #B45309 !important; }
+  /* Pareto section */
+  .print-pareto { border: 1px solid #ccc !important; padding: 8px !important; }
+  /* Header for print */
+  .print-header { border-bottom: 2px solid #000 !important; padding-bottom: 8px !important; margin-bottom: 12px !important; }
+  /* Expanded detail row */
+  .detail-row td { background: #f5f5f5 !important; }
+  /* notInDb rows */
+  .print-nodb { border-left: 3px solid #D97706 !important; }
+  .print-nodb td:nth-child(3) { color: #92400E !important; }
+}
