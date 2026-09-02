@@ -1,9 +1,9 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { processExcelFile, unifyVoices } from './engine';
-import { DETECTION_POINTS } from './config';
+import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS } from './config';
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca } from './supabase';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#fff',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -38,6 +38,9 @@ export default function App(){
   const[giros,setGiros]=useState([]);
   const[unifyTarget,setUnifyTarget]=useState(null);
   const[dragOver,setDragOver]=useState(false);
+  const[scrapEventos,setScrapEventos]=useState([]);
+  const[scrapForm,setScrapForm]=useState(null); // form data when adding new event, null = closed
+  const[scrapFilters,setScrapFilters]=useState({desde:'',hasta:'',turno:'ALL',origen:'ALL',tipoMaterial:'ALL'});
   const fileRef=useRef(null);const defFileRef=useRef(null);
 
   // Auth
@@ -48,6 +51,7 @@ export default function App(){
   useEffect(()=>{
     if(!session||!linea)return;
     fetchDefectos(linea).then(setDefectos).catch(console.error);
+    fetchScrapEventos(linea).then(setScrapEventos).catch(console.error);
     // Check if there's a saved active giro for this linea
     const savedId=localStorage.getItem(`activeGiro_${linea}`);
     if(savedId){
@@ -65,6 +69,13 @@ export default function App(){
     } else {
       setResult(null);setGiroId(null);setGiroName('');setPdcaMap({});
     }
+  },[session,linea]);
+
+  // Realtime: refresh scrap events for the linea
+  useEffect(()=>{
+    if(!session||!linea)return;
+    const unsub=subscribeScrap(linea,()=>{fetchScrapEventos(linea).then(setScrapEventos).catch(console.error);});
+    return unsub;
   },[session,linea]);
 
   // Realtime: refresh history list when another user creates/deletes a giro
@@ -127,6 +138,32 @@ export default function App(){
   const handlePrint=useCallback(()=>{setFilter('AA');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
   const handlePrintAll=useCallback(()=>{setFilter('ALL');setSelectedRow(null);setTimeout(()=>window.print(),300);},[]);
 
+  const openScrapForm=useCallback((prefill)=>{
+    setScrapForm({
+      giroId:prefill?.giroId||null,vozNum:prefill?.vozNum||null,
+      defectoNombre:prefill?.defectoNombre||'',componente:prefill?.componente||'',
+      fecha:new Date().toISOString().split('T')[0],turno:'A',origen:'Producción',destino:'Scrap',
+      tipoMaterial:'Cuenta Plena',cantidad:1,costoUnitario:'',notas:'',
+    });
+    setPage('scrap');
+  },[]);
+  const handleSaveScrap=useCallback(async()=>{
+    if(!scrapForm)return;
+    if(!scrapForm.defectoNombre){alert('Ingresá el nombre del defecto/parte');return;}
+    const cant=parseInt(scrapForm.cantidad);const costo=parseFloat(scrapForm.costoUnitario);
+    if(!cant||cant<1){alert('Ingresá una cantidad válida');return;}
+    if(isNaN(costo)||costo<0){alert('Ingresá un costo unitario válido');return;}
+    try{
+      await saveScrapEvento({...scrapForm,cantidad:cant,costoUnitario:costo},linea);
+      const fresh=await fetchScrapEventos(linea);setScrapEventos(fresh);
+      setScrapForm(null);
+    }catch(e){alert('Error: '+e.message);}
+  },[scrapForm,linea]);
+  const handleDeleteScrap=useCallback(async(id)=>{
+    if(!confirm('¿Eliminar este registro de scrap?'))return;
+    try{await deleteScrapEvento(id);setScrapEventos(prev=>prev.filter(e=>e.id!==id));}catch(e){alert('Error: '+e.message);}
+  },[]);
+
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
 
   const filteredRows=useMemo(()=>{if(!result)return[];let r=result.qaRows;if(filter!=='ALL')r=r.filter(x=>x.voz===filter);if(search){const s=search.toLowerCase();r=r.filter(x=>x.concat.toLowerCase().includes(s)||x.component.toLowerCase().includes(s));}return r;},[result,filter,search]);
@@ -142,15 +179,59 @@ export default function App(){
     const defCustomerPPM=(dpTotals['SCA']||0)+(dpTotals['TDF/TTV']||0)+(dpTotals['Garantía']||0);
     const defIPPM=dpTotals['IPPM']||0;
 
+    // Scrap events linked to this giro reclassify part of totalDefects as Scrap / Devolución (not reworked)
+    const linkedScrap=scrapEventos.filter(e=>e.giro_id===giroId);
+    const scrapQty=linkedScrap.filter(e=>e.destino==='Scrap').reduce((s,e)=>s+e.cantidad,0);
+    const devolQty=linkedScrap.filter(e=>e.destino==='Devolución Proveedor').reduce((s,e)=>s+e.cantidad,0);
+    const scrapUSD=linkedScrap.filter(e=>e.destino==='Scrap').reduce((s,e)=>s+Number(e.monto||0),0);
+    const reworkQty=Math.max(0,defTotal-scrapQty-devolQty);
+
     const fpy=pt>0?((pt-defTotal)/pt*100):null;
-    const rework=pt>0?(defTotal/pt*100):null;
+    const rework=pt>0?(reworkQty/pt*100):null;
+    const scrapRate=pt>0?(scrapQty/pt*100):null;
     const dppm=pe>0?(defAntena/pe*1000000):null;
     const custPpm=pe>0?(defCustomerPPM/pe*1000000):null;
     const ippm=bc>0?(defIPPM/bc*1000000):null;
     const piezasDia=dt>0?(pt/dt):null;
 
-    return{fpy,rework,dppm,custPpm,ippm,piezasDia,defAntena,defCustomerPPM,defIPPM};
-  },[result]);
+    return{fpy,rework,scrapRate,scrapQty,scrapUSD,devolQty,reworkQty,dppm,custPpm,ippm,piezasDia,defAntena,defCustomerPPM,defIPPM};
+  },[result,scrapEventos,giroId]);
+
+  const scrapFiltered=useMemo(()=>{
+    let list=scrapEventos;
+    if(scrapFilters.desde)list=list.filter(e=>e.fecha>=scrapFilters.desde);
+    if(scrapFilters.hasta)list=list.filter(e=>e.fecha<=scrapFilters.hasta);
+    if(scrapFilters.turno!=='ALL')list=list.filter(e=>e.turno===scrapFilters.turno);
+    if(scrapFilters.origen!=='ALL')list=list.filter(e=>e.origen===scrapFilters.origen);
+    if(scrapFilters.tipoMaterial!=='ALL')list=list.filter(e=>e.tipo_material===scrapFilters.tipoMaterial);
+    return list;
+  },[scrapEventos,scrapFilters]);
+
+  const scrapDashboard=useMemo(()=>{
+    const list=scrapFiltered;
+    const scrapOnly=list.filter(e=>e.destino==='Scrap');
+    const totalScrapUSD=scrapOnly.reduce((s,e)=>s+Number(e.monto||0),0);
+    const totalScrapQty=scrapOnly.reduce((s,e)=>s+e.cantidad,0);
+    // Pie by destino (all destinos, USD)
+    const porDestino={};
+    for(const e of list)porDestino[e.destino]=(porDestino[e.destino]||0)+Number(e.monto||0);
+    const totalAllUSD=Object.values(porDestino).reduce((a,b)=>a+b,0);
+    // Top 5 by part (defecto+componente) - USD and Cantidad, scrap only
+    const byPart={};
+    for(const e of scrapOnly){const key=`${e.componente?e.componente+' - ':''}${e.defecto_nombre}`;if(!byPart[key])byPart[key]={usd:0,qty:0};byPart[key].usd+=Number(e.monto||0);byPart[key].qty+=e.cantidad;}
+    const top5USD=Object.entries(byPart).sort((a,b)=>b[1].usd-a[1].usd).slice(0,5);
+    const top5Qty=Object.entries(byPart).sort((a,b)=>b[1].qty-a[1].qty).slice(0,5);
+    // Modo de falla (defecto_nombre only) - USD and Cantidad
+    const byDefect={};
+    for(const e of scrapOnly){if(!byDefect[e.defecto_nombre])byDefect[e.defecto_nombre]={usd:0,qty:0};byDefect[e.defecto_nombre].usd+=Number(e.monto||0);byDefect[e.defecto_nombre].qty+=e.cantidad;}
+    const modoFallaUSD=Object.entries(byDefect).sort((a,b)=>b[1].usd-a[1].usd).slice(0,8);
+    const modoFallaQty=Object.entries(byDefect).sort((a,b)=>b[1].qty-a[1].qty).slice(0,8);
+    // Trend by day
+    const byDay={};
+    for(const e of scrapOnly)byDay[e.fecha]=(byDay[e.fecha]||0)+Number(e.monto||0);
+    const trend=Object.entries(byDay).sort((a,b)=>a[0].localeCompare(b[0]));
+    return{totalScrapUSD,totalScrapQty,porDestino,totalAllUSD,top5USD,top5Qty,modoFallaUSD,modoFallaQty,trend};
+  },[scrapFiltered]);
 
   const th={padding:'8px 5px',textAlign:'center',color:'#94A3B8',fontWeight:600,fontSize:10,textTransform:'uppercase',borderBottom:'2px solid #334155',whiteSpace:'nowrap',position:'sticky',top:0,background:'#1E293B',zIndex:10};
   const td={padding:'6px 5px',textAlign:'center',whiteSpace:'nowrap',fontSize:11};
@@ -188,6 +269,7 @@ export default function App(){
         <HC icon="📊" title="Nuevo Giro" desc="Cargar Excel de SurveyMonkey" onClick={()=>setPage('upload')}/>
         <HC icon="📋" title="Historial" desc="Ver giros anteriores" onClick={loadHistory}/>
         <HC icon="⚙️" title="Defectos" desc="Editar severidad y costos" onClick={()=>setPage('defectos')}/>
+        <HC icon="🗑️" title="Scrap" desc="Dashboard de seguimiento de scrap" onClick={()=>{setScrapForm(null);setPage('scrap');}}/>
       </div>}
     </div>
   );
@@ -256,6 +338,105 @@ export default function App(){
     </div>
   );
 
+  // ── SCRAP ──
+  if(page==='scrap')return(
+    <div style={{minHeight:'100vh',padding:24,maxWidth:1400,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20,flexWrap:'wrap',gap:12}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>{result?<Btn onClick={()=>setPage('matrix')}>← Matriz</Btn>:<Btn onClick={()=>setPage('home')}>← Inicio</Btn>}<h2 style={{fontSize:22,fontWeight:700,color:'#F8FAFC',margin:0}}>Scrap — {linea}</h2></div>
+        <Btn bg="#F59E0B" color="#0F172A" onClick={()=>openScrapForm({giroId})}>+ Registrar evento</Btn>
+      </div>
+
+      {scrapForm&&(
+        <div style={{background:'#1E293B',borderRadius:12,padding:20,marginBottom:20,border:'2px solid #F59E0B'}}>
+          <h3 style={{fontSize:14,fontWeight:600,color:'#F59E0B',marginBottom:14,textTransform:'uppercase',letterSpacing:1}}>Nuevo registro de resolución</h3>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:14}}>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Defecto / Parte *</label><input value={scrapForm.defectoNombre} onChange={e=>setScrapForm(p=>({...p,defectoNombre:e.target.value}))} placeholder="Ej: Funda - Quemada" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Componente</label><input value={scrapForm.componente} onChange={e=>setScrapForm(p=>({...p,componente:e.target.value}))} placeholder="Ej: Funda" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Fecha</label><input type="date" value={scrapForm.fecha} onChange={e=>setScrapForm(p=>({...p,fecha:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Turno</label><select value={scrapForm.turno} onChange={e=>setScrapForm(p=>({...p,turno:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{TURNOS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Origen</label><select value={scrapForm.origen} onChange={e=>setScrapForm(p=>({...p,origen:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{ORIGENES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Destino final *</label><select value={scrapForm.destino} onChange={e=>setScrapForm(p=>({...p,destino:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{DESTINOS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Tipo material</label><select value={scrapForm.tipoMaterial} onChange={e=>setScrapForm(p=>({...p,tipoMaterial:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}>{TIPOS_MATERIAL.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+            <div><label style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Cantidad *</label><input type="number" min="1" value={scrapForm.cantidad} onChange={e=>setScrapForm(p=>({...p,cantidad:e.target.value}))} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13,fontFamily:"'IBM Plex Mono'"}}/></div>
+            <div><label style={{fontSize:11,color:'#F59E0B',display:'block',marginBottom:4}}>Costo unitario (USD) *</label><input type="number" min="0" step="0.01" value={scrapForm.costoUnitario} onChange={e=>setScrapForm(p=>({...p,costoUnitario:e.target.value}))} placeholder="Ej: 12.50" style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #F59E0B',background:'#0F172A',color:'#F8FAFC',fontSize:13,fontFamily:"'IBM Plex Mono'"}}/></div>
+          </div>
+          {scrapForm.giroId&&<div style={{fontSize:11,color:'#16A34A',marginBottom:10}}>✓ Vinculado a un Giro de QA {scrapForm.vozNum?`· Voz #${scrapForm.vozNum}`:''} — este defecto ya cuenta como reportado, no se duplica en la Matriz</div>}
+          {!scrapForm.giroId&&<div style={{fontSize:11,color:'#64748B',marginBottom:10}}>Sin vincular a un Giro — solo aparecerá en este dashboard de Scrap</div>}
+          <label style={{display:'block',marginBottom:14}}><span style={{fontSize:11,color:'#94A3B8',display:'block',marginBottom:4}}>Notas</span><textarea value={scrapForm.notas} onChange={e=>setScrapForm(p=>({...p,notas:e.target.value}))} rows={2} style={{width:'100%',padding:'8px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13,resize:'vertical',fontFamily:'inherit'}}/></label>
+          <div style={{display:'flex',gap:8}}><Btn bg="#16A34A" onClick={handleSaveScrap}>✓ Guardar</Btn><Btn onClick={()=>setScrapForm(null)}>Cancelar</Btn></div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap',alignItems:'end',marginBottom:20,background:'#1E293B',padding:14,borderRadius:10,border:'1px solid #334155'}}>
+        <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Desde</label><input type="date" value={scrapFilters.desde} onChange={e=>setScrapFilters(p=>({...p,desde:e.target.value}))} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}/></div>
+        <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Hasta</label><input type="date" value={scrapFilters.hasta} onChange={e=>setScrapFilters(p=>({...p,hasta:e.target.value}))} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}/></div>
+        <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Turno</label><select value={scrapFilters.turno} onChange={e=>setScrapFilters(p=>({...p,turno:e.target.value}))} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}><option value="ALL">Todos</option>{TURNOS.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+        <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Origen</label><select value={scrapFilters.origen} onChange={e=>setScrapFilters(p=>({...p,origen:e.target.value}))} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}><option value="ALL">Todos</option>{ORIGENES.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+        <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Tipo material</label><select value={scrapFilters.tipoMaterial} onChange={e=>setScrapFilters(p=>({...p,tipoMaterial:e.target.value}))} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}><option value="ALL">Todos</option>{TIPOS_MATERIAL.map(t=><option key={t} value={t}>{t}</option>)}</select></div>
+        {(scrapFilters.desde||scrapFilters.hasta||scrapFilters.turno!=='ALL'||scrapFilters.origen!=='ALL'||scrapFilters.tipoMaterial!=='ALL')&&<Btn onClick={()=>setScrapFilters({desde:'',hasta:'',turno:'ALL',origen:'ALL',tipoMaterial:'ALL'})} style={{fontSize:11}}>Limpiar filtros</Btn>}
+      </div>
+
+      {/* Summary cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:20}}>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}><div style={{fontSize:11,color:'#94A3B8',marginBottom:6}}>🗑️ Scrap (USD) — Acumulado</div><div style={{fontSize:28,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapDashboard.totalScrapUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div></div>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}><div style={{fontSize:11,color:'#94A3B8',marginBottom:6}}>📦 Scrap (Cantidad)</div><div style={{fontSize:28,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapDashboard.totalScrapQty.toLocaleString()}</div></div>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155',gridColumn:'span 2'}}>
+          <div style={{fontSize:11,color:'#94A3B8',marginBottom:8}}>Destino final del material no conforme (USD)</div>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{DESTINOS.map(d=>{const v=scrapDashboard.porDestino[d]||0;const pct=scrapDashboard.totalAllUSD>0?(v/scrapDashboard.totalAllUSD*100):0;return v>0?(<div key={d} style={{display:'flex',alignItems:'center',gap:6}}><span style={{width:10,height:10,borderRadius:2,background:DESTINO_COLORS[d]}}/><span style={{fontSize:12,color:'#F8FAFC'}}>{d}: ${v.toFixed(0)} ({pct.toFixed(1)}%)</span></div>):null;})}</div>
+        </div>
+      </div>
+
+      {/* Top 5 tables */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h4 style={{fontSize:12,fontWeight:600,color:'#F59E0B',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Scrap (USD) — Top 5</h4>
+          {scrapDashboard.top5USD.length===0?<p style={{color:'#475569',fontSize:12}}>Sin datos</p>:scrapDashboard.top5USD.map(([name,v],i)=>{const max=scrapDashboard.top5USD[0][1].usd;return(<div key={i} style={{marginBottom:8}}><div style={{fontSize:11,color:'#E2E8F0',marginBottom:3}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:14,background:'#334155',borderRadius:3}}><div style={{height:'100%',width:`${v.usd/max*100}%`,background:'#DC2626',borderRadius:3}}/></div><span style={{fontSize:11,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:50,textAlign:'right'}}>${v.usd.toFixed(0)}</span></div></div>);})}
+        </div>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h4 style={{fontSize:12,fontWeight:600,color:'#38BDF8',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Scrap (Cantidad) — Top 5</h4>
+          {scrapDashboard.top5Qty.length===0?<p style={{color:'#475569',fontSize:12}}>Sin datos</p>:scrapDashboard.top5Qty.map(([name,v],i)=>{const max=scrapDashboard.top5Qty[0][1].qty;return(<div key={i} style={{marginBottom:8}}><div style={{fontSize:11,color:'#E2E8F0',marginBottom:3}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:14,background:'#334155',borderRadius:3}}><div style={{height:'100%',width:`${v.qty/max*100}%`,background:'#38BDF8',borderRadius:3}}/></div><span style={{fontSize:11,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:36,textAlign:'right'}}>{v.qty}</span></div></div>);})}
+        </div>
+      </div>
+
+      {/* Modo de falla */}
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:20}}>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h4 style={{fontSize:12,fontWeight:600,color:'#F59E0B',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Modo de falla — más impacto (USD)</h4>
+          {scrapDashboard.modoFallaUSD.length===0?<p style={{color:'#475569',fontSize:12}}>Sin datos</p>:scrapDashboard.modoFallaUSD.map(([name,v],i)=>{const max=scrapDashboard.modoFallaUSD[0][1].usd;return(<div key={i} style={{marginBottom:7}}><div style={{fontSize:11,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:10,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.usd/max*100}%`,background:'#EA580C',borderRadius:2}}/></div><span style={{fontSize:10,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:44,textAlign:'right'}}>${v.usd.toFixed(0)}</span></div></div>);})}
+        </div>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h4 style={{fontSize:12,fontWeight:600,color:'#38BDF8',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Modo de falla — más impacto (Cantidad)</h4>
+          {scrapDashboard.modoFallaQty.length===0?<p style={{color:'#475569',fontSize:12}}>Sin datos</p>:scrapDashboard.modoFallaQty.map(([name,v],i)=>{const max=scrapDashboard.modoFallaQty[0][1].qty;return(<div key={i} style={{marginBottom:7}}><div style={{fontSize:11,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:10,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.qty/max*100}%`,background:'#0EA5E9',borderRadius:2}}/></div><span style={{fontSize:10,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:30,textAlign:'right'}}>{v.qty}</span></div></div>);})}
+        </div>
+      </div>
+
+      {/* Trend */}
+      <div style={{background:'#1E293B',borderRadius:12,padding:16,marginBottom:20,border:'1px solid #334155'}}>
+        <h4 style={{fontSize:12,fontWeight:600,color:'#F59E0B',marginBottom:10,textTransform:'uppercase',letterSpacing:1}}>Scrap Total por día (USD)</h4>
+        {scrapDashboard.trend.length===0?<p style={{color:'#475569',fontSize:12}}>Sin datos</p>:
+          <div style={{display:'flex',gap:6,alignItems:'end',height:100,overflowX:'auto'}}>
+            {scrapDashboard.trend.map(([d,v],i)=>{const max=Math.max(...scrapDashboard.trend.map(t=>t[1]));return(<div key={i} title={`${d}: $${v.toFixed(0)}`} style={{display:'flex',flexDirection:'column',alignItems:'center',minWidth:36}}><span style={{fontSize:9,color:'#94A3B8',marginBottom:3}}>${v.toFixed(0)}</span><div style={{width:20,height:`${Math.max((v/max*70),4)}px`,background:'#DC2626',borderRadius:'3px 3px 0 0'}}/><span style={{fontSize:8,color:'#64748B',marginTop:3,writingMode:'vertical-rl'}}>{d.slice(5)}</span></div>);})}
+          </div>
+        }
+      </div>
+
+      {/* Event list */}
+      <div style={{overflowX:'auto',borderRadius:12,border:'1px solid #334155'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+          <thead><tr style={{background:'#1E293B'}}><th style={th}>Fecha</th><th style={th}>Turno</th><th style={{...th,textAlign:'left'}}>Defecto</th><th style={th}>Origen</th><th style={th}>Destino</th><th style={th}>Material</th><th style={th}>Cant.</th><th style={th}>Costo U.</th><th style={th}>Monto</th><th style={th}>Giro</th><th style={th}>—</th></tr></thead>
+          <tbody>{scrapFiltered.map((e,i)=>(<tr key={e.id} style={{background:i%2===0?'#0F172A':'#131C2E',borderBottom:'1px solid #1E293B'}}>
+            <td style={td}>{e.fecha}</td><td style={td}>{e.turno||'—'}</td><td style={{...td,textAlign:'left'}}>{e.componente?`${e.componente} - `:''}{e.defecto_nombre}</td><td style={td}>{e.origen||'—'}</td>
+            <td style={td}><span style={{padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,background:DESTINO_COLORS[e.destino]||'#334155',color:'#fff'}}>{e.destino}</span></td>
+            <td style={td}>{e.tipo_material||'—'}</td><td style={{...td,fontWeight:700}}>{e.cantidad}</td><td style={td}>${Number(e.costo_unitario).toFixed(2)}</td><td style={{...td,fontWeight:700,color:'#F59E0B',fontFamily:"'IBM Plex Mono'"}}>${Number(e.monto).toFixed(2)}</td>
+            <td style={td}>{e.giro_id?'✓':'—'}</td><td style={td}><button onClick={()=>handleDeleteScrap(e.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:13}}>🗑️</button></td>
+          </tr>))}</tbody>
+        </table>
+        {scrapFiltered.length===0&&<p style={{textAlign:'center',padding:30,color:'#64748B',fontSize:13}}>No hay registros de scrap para {linea} con estos filtros</p>}
+      </div>
+    </div>
+  );
+
   // ── MATRIX ──
   if(!result)return null;
   const{summary,totalRecords,totalDefectTypes,bancosControlados,totalDefects}=result;
@@ -264,7 +445,7 @@ export default function App(){
       <div className="print-header" style={{background:'linear-gradient(135deg,#1E293B,#0F172A)',borderBottom:'1px solid #334155',padding:'14px 24px',position:'sticky',top:0,zIndex:50}}>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12,maxWidth:1900,margin:'0 auto'}}>
           <div><div style={{fontSize:11,fontWeight:600,letterSpacing:3,color:'#F59E0B',textTransform:'uppercase'}}>WCM · Pilar Calidad · {linea}</div><h1 style={{fontSize:20,fontWeight:700,color:'#F8FAFC',margin:'2px 0 0'}}>{giroName||'Matriz QA'}</h1></div>
-          <div style={{display:'flex',gap:8}} className="no-print"><Btn onClick={handlePrint} bg="#1D4ED8" color="#fff">🖨️ Imprimir AA</Btn><Btn onClick={handlePrintAll} bg="#1D4ED8" color="#fff" style={{fontSize:11}}>🖨️ Todas</Btn><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setPiezasTotales('');setDiasTrabajados('');setPiezasEntregadas('');setGiroName('');setPdcaMap({});setGiroId(null);if(linea)localStorage.removeItem(`activeGiro_${linea}`);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
+          <div style={{display:'flex',gap:8}} className="no-print"><Btn onClick={handlePrint} bg="#1D4ED8" color="#fff">🖨️ Imprimir AA</Btn><Btn onClick={handlePrintAll} bg="#1D4ED8" color="#fff" style={{fontSize:11}}>🖨️ Todas</Btn><Btn onClick={()=>{setScrapForm(null);setPage('scrap');}}>🗑️ Scrap</Btn><Btn onClick={()=>setPage('defectos')}>⚙️ Defectos</Btn><Btn onClick={()=>setPage('home')}>← Inicio</Btn><Btn onClick={()=>{setPage('home');setResult(null);setFilter('ALL');setSearch('');setPendingFile(null);setBancos('');setPiezasTotales('');setDiasTrabajados('');setPiezasEntregadas('');setGiroName('');setPdcaMap({});setGiroId(null);if(linea)localStorage.removeItem(`activeGiro_${linea}`);}} bg="#7F1D1D" color="#FCA5A5" style={{fontSize:11}}>Cerrar giro</Btn></div>
         </div>
       </div>
       <div style={{padding:'16px 24px',maxWidth:1900,margin:'0 auto'}}>
@@ -278,7 +459,7 @@ export default function App(){
             <div className="fade-in" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10}}>
               <WcmCard label="FPY (First Pass Yield)" value={wcmKpis.fpy!=null?`${wcmKpis.fpy.toFixed(2)}%`:'—'} color={wcmKpis.fpy>=95?'#16A34A':wcmKpis.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo" />
               <WcmCard label="Rework Rate" value={wcmKpis.rework!=null?`${wcmKpis.rework.toFixed(2)}%`:'—'} color={wcmKpis.rework<=5?'#16A34A':wcmKpis.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo" />
-              <WcmCard label="Scrap Rate" value="N/D" color="#475569" sub="Pendiente de vincular" />
+              <WcmCard label="Scrap Rate" value={wcmKpis.scrapRate!=null?`${wcmKpis.scrapRate.toFixed(2)}%`:'N/D'} color={wcmKpis.scrapQty>0?(wcmKpis.scrapRate<=2?'#16A34A':wcmKpis.scrapRate<=5?'#CA8A04':'#DC2626'):'#475569'} sub={wcmKpis.scrapQty>0?`${wcmKpis.scrapQty} pzs · $${wcmKpis.scrapUSD.toFixed(0)}`:'Sin eventos vinculados'} />
               <WcmCard label="Customer DPPM" value={wcmKpis.dppm!=null?Math.round(wcmKpis.dppm).toLocaleString():'—'} color="#F59E0B" sub={`Antena: ${wcmKpis.defAntena} defectos`} />
               <WcmCard label="Customer PPM" value={wcmKpis.custPpm!=null?Math.round(wcmKpis.custPpm).toLocaleString():'—'} color="#F59E0B" sub={`SCA+TDF+Gtía: ${wcmKpis.defCustomerPPM}`} />
               <WcmCard label="Internal PPM" value={wcmKpis.ippm!=null?Math.round(wcmKpis.ippm).toLocaleString():'—'} color="#38BDF8" sub={`IPPM: ${wcmKpis.defIPPM} defectos`} />
@@ -309,6 +490,7 @@ export default function App(){
             sel&&<tr key={`d-${row.vozNum}`}><td colSpan={11+DETECTION_POINTS.length} style={{padding:'14px 16px',background:'#1E293B',borderBottom:'2px solid #F59E0B'}}><div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
               <div><div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8,marginBottom:12}}><Dt l="Componente" v={row.component}/><Dt l="Ocurrencia %" v={`${(row.ocurrenciaPct*100).toFixed(4)}%`} m/><Dt l="C.Int" v={row.costoInterno} m/><Dt l="C.Ext" v={row.costoExterno} m/><Dt l="C.Usado" v={row.costo} m h/><Dt l="Fórmula" v={`${row.severidad}×${row.ocurrencia}×${row.detectabilidad}×${row.costo}=${row.index}`} m h/></div>
                 <div style={{marginTop:8,padding:'10px 12px',background:'#0F172A',borderRadius:8,border:'1px solid #334155'}}><div style={{fontSize:10,color:'#F59E0B',fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:6}}>Unificar voces</div><div style={{display:'flex',gap:8,alignItems:'center'}} onClick={e=>e.stopPropagation()}><input placeholder="Nros de voz (ej: 5,8,12)" value={unifyTarget?.vozNum===row.vozNum?unifyTarget.inputVal:''} onChange={e=>setUnifyTarget({vozNum:row.vozNum,inputVal:e.target.value})} style={{flex:1,padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:12}}/><Btn bg="#F59E0B" color="#0F172A" onClick={()=>{if(unifyTarget?.vozNum===row.vozNum)handleUnify(row.vozNum,unifyTarget.inputVal);}} style={{padding:'6px 12px',fontSize:11}}>Unificar</Btn></div><p style={{fontSize:10,color:'#64748B',marginTop:4}}>Las ocurrencias se suman y las voces indicadas se eliminan</p></div>
+                <div style={{marginTop:8}} onClick={e=>e.stopPropagation()}><Btn bg="#7C2D12" color="#FDBA74" onClick={()=>openScrapForm({giroId,vozNum:row.vozNum,defectoNombre:row.defectName,componente:row.component})} style={{width:'100%',fontSize:11}}>🗑️ Registrar resolución (Scrap/Devolución/Retrabajo)</Btn></div>
               </div>
               <div><div style={{marginBottom:8}}><span style={{fontSize:10,color:'#64748B',textTransform:'uppercase'}}>Responsable</span><input value={pc.responsable} onChange={e=>handlePdca(row.vozNum,'responsable',e.target.value)} placeholder="Asignar..." onClick={e=>e.stopPropagation()} style={{width:'100%',padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13,marginTop:4}}/></div>
                 <div><span style={{fontSize:10,color:'#64748B',textTransform:'uppercase'}}>Comentarios</span><textarea value={pc.comments} onChange={e=>handlePdca(row.vozNum,'comments',e.target.value)} placeholder="Notas..." onClick={e=>e.stopPropagation()} rows={2} style={{width:'100%',padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12,marginTop:4,resize:'vertical',fontFamily:'inherit'}}/></div>
