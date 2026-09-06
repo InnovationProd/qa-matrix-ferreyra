@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { processExcelFile, unifyVoices } from './engine';
+import { processExcelFile, unifyVoices, buildGiroFromReportes } from './engine';
 import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS } from './config';
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap } from './supabase';
+import KioskApp from './Kiosk';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, markReportesAsGiro } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#fff',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -12,6 +13,18 @@ const Btn=({children,onClick,bg='#334155',color='#F8FAFC',style,...p})=><button 
 export default function App(){
   const[session,setSession]=useState(null);
   const[authLoading,setAuthLoading]=useState(true);
+  const[kioskMode,setKioskMode]=useState(false);
+  const[tiposAsientoAdmin,setTiposAsientoAdmin]=useState([]);
+  const[modelosAdmin,setModelosAdmin]=useState([]);
+  const[cuadrantesAdmin,setCuadrantesAdmin]=useState([]);
+  const[newTipoAsiento,setNewTipoAsiento]=useState('');
+  const[newModelo,setNewModelo]=useState('');
+  const[newCuadrante,setNewCuadrante]=useState({tipoAsiento:'',nombre:''});
+  const[giroSource,setGiroSource]=useState('excel'); // 'excel' | 'bd'
+  const[reportesDesde,setReportesDesde]=useState('');
+  const[reportesHasta,setReportesHasta]=useState('');
+  const[reportesPendientes,setReportesPendientes]=useState([]);
+  const[loadingReportes,setLoadingReportes]=useState(false);
   const[authError,setAuthError]=useState('');
   const[loginEmail,setLoginEmail]=useState('');
   const[loginPass,setLoginPass]=useState('');
@@ -175,6 +188,60 @@ export default function App(){
     try{await deleteScrapEvento(id);setScrapEventos(prev=>prev.filter(e=>e.id!==id));}catch(e){alert('Error: '+e.message);}
   },[]);
 
+  const loadCatalogosAdmin=useCallback(async()=>{
+    if(!linea)return;
+    try{
+      const[ta,mo,cu]=await Promise.all([fetchTiposAsiento(linea),fetchModelos(linea),fetchCuadrantes(linea)]);
+      setTiposAsientoAdmin(ta);setModelosAdmin(mo);setCuadrantesAdmin(cu);
+    }catch(e){console.error(e);}
+  },[linea]);
+
+  const handleAddTipoAsiento=useCallback(async()=>{
+    if(!newTipoAsiento.trim())return;
+    try{await saveTipoAsiento(newTipoAsiento.trim(),linea);setNewTipoAsiento('');loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
+  },[newTipoAsiento,linea,loadCatalogosAdmin]);
+  const handleDeleteTipoAsiento=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteTipoAsiento(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
+
+  const handleAddModelo=useCallback(async()=>{
+    if(!newModelo.trim())return;
+    try{await saveModelo(newModelo.trim(),linea);setNewModelo('');loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
+  },[newModelo,linea,loadCatalogosAdmin]);
+  const handleDeleteModelo=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteModelo(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
+
+  const handleAddCuadrante=useCallback(async()=>{
+    if(!newCuadrante.nombre.trim()||!newCuadrante.tipoAsiento)return;
+    try{await saveCuadrante(newCuadrante.nombre.trim(),newCuadrante.tipoAsiento,linea);setNewCuadrante(p=>({...p,nombre:''}));loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
+  },[newCuadrante,linea,loadCatalogosAdmin]);
+  const handleDeleteCuadrante=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteCuadrante(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
+
+  const handleBuscarReportes=useCallback(async()=>{
+    setLoadingReportes(true);
+    try{const rows=await fetchReportesDefectos(linea,reportesDesde,reportesHasta);setReportesPendientes(rows);}catch(e){alert('Error: '+e.message);}
+    setLoadingReportes(false);
+  },[linea,reportesDesde,reportesHasta]);
+
+  const handleProcessFromDb=useCallback(async()=>{
+    const b=parseInt(bancos);if(!b||b<1){setError('Ingresá la cantidad de bancos controlados');return;}
+    const pt=parseInt(piezasTotales);if(!pt||pt<1){setError('Ingresá la cantidad de piezas totales producidas');return;}
+    const dt=parseInt(diasTrabajados);if(!dt||dt<1){setError('Ingresá los días trabajados');return;}
+    const pe=parseInt(piezasEntregadas);if(!pe||pe<1){setError('Ingresá la cantidad de piezas entregadas al cliente');return;}
+    if(reportesPendientes.length===0){setError('No hay reportes cargados en ese rango de fechas');return;}
+    setLoading(true);setError(null);
+    try{
+      const res=buildGiroFromReportes(reportesPendientes,b,defectosDb);
+      setResult({...res,piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe});
+      const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
+      const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0],piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);
+      if(saved?.id){
+        setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);
+        const pd=await fetchPdcas(saved.id);setPdcaMap(pd);
+        await markReportesAsGiro(reportesPendientes.map(r=>r.id),saved.id);
+      }
+      setPage('matrix');
+    }catch(err){setError(err.message);}
+    setLoading(false);
+  },[bancos,piezasTotales,diasTrabajados,piezasEntregadas,reportesPendientes,defectosDb,giroName,linea]);
+
   const notInDbCount=useMemo(()=>result?result.qaRows.filter(r=>r.notInDb).length:0,[result]);
 
   const filteredRows=useMemo(()=>{if(!result)return[];let r=result.qaRows;if(filter!=='ALL')r=r.filter(x=>x.voz===filter);if(search){const s=search.toLowerCase();r=r.filter(x=>x.concat.toLowerCase().includes(s)||x.component.toLowerCase().includes(s));}return r;},[result,filter,search]);
@@ -256,16 +323,25 @@ export default function App(){
 
   // ── LOGIN ──
   if(authLoading)return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#94A3B8'}}>Cargando...</div>;
+  if(kioskMode)return<KioskApp onExit={()=>setKioskMode(false)}/>;
   if(!session)return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(165deg,#0F172A,#1E293B 50%,#0F172A)',padding:24}}>
       <div style={{textAlign:'center',marginBottom:40}}><div style={{fontSize:14,fontWeight:600,letterSpacing:4,color:'#F59E0B',textTransform:'uppercase',marginBottom:8}}>World Class Manufacturing</div><h1 style={{fontSize:42,fontWeight:700,color:'#F8FAFC',margin:0}}>Matriz QA</h1></div>
-      <form onSubmit={handleLogin} style={{width:'100%',maxWidth:400,background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'1px solid #334155'}}>
-        <h2 style={{fontSize:20,fontWeight:600,color:'#F8FAFC',marginBottom:24,textAlign:'center'}}>Iniciar sesión</h2>
-        <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Email</span><input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
-        <label style={{display:'block',marginBottom:24}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Contraseña</span><input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
-        {authError&&<div style={{padding:'10px 14px',background:'#7F1D1D',borderRadius:8,color:'#FCA5A5',fontSize:13,marginBottom:16}}>{authError}</div>}
-        <button type="submit" style={{width:'100%',padding:12,background:'#F59E0B',color:'#0F172A',border:'none',borderRadius:8,fontWeight:700,fontSize:15,cursor:'pointer'}}>Ingresar</button>
-      </form>
+      <div style={{display:'flex',gap:24,alignItems:'stretch',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:820}}>
+        <div style={{flex:'1 1 320px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'2px solid #F59E0B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+          <div style={{fontSize:48,marginBottom:12}}>📷</div>
+          <h2 style={{fontSize:18,fontWeight:700,color:'#F8FAFC',marginBottom:8}}>Cargar Defectos</h2>
+          <p style={{fontSize:13,color:'#94A3B8',marginBottom:20}}>Acceso directo para operarios de planta — sin usuario ni contraseña</p>
+          <Btn bg="#F59E0B" color="#0F172A" onClick={()=>setKioskMode(true)} style={{padding:'12px 28px',fontSize:15}}>Ingresar al Kiosco</Btn>
+        </div>
+        <form onSubmit={handleLogin} style={{flex:'1 1 320px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'1px solid #334155'}}>
+          <h2 style={{fontSize:18,fontWeight:600,color:'#F8FAFC',marginBottom:20,textAlign:'center'}}>Gestión QA — Iniciar sesión</h2>
+          <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Email</span><input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
+          <label style={{display:'block',marginBottom:24}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Contraseña</span><input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
+          {authError&&<div style={{padding:'10px 14px',background:'#7F1D1D',borderRadius:8,color:'#FCA5A5',fontSize:13,marginBottom:16}}>{authError}</div>}
+          <button type="submit" style={{width:'100%',padding:12,background:'#F59E0B',color:'#0F172A',border:'none',borderRadius:8,fontWeight:700,fontSize:15,cursor:'pointer'}}>Ingresar</button>
+        </form>
+      </div>
     </div>
   );
 
@@ -281,6 +357,7 @@ export default function App(){
         <HC icon="📋" title="Historial" desc="Ver giros anteriores" onClick={loadHistory}/>
         <HC icon="⚙️" title="Defectos" desc="Editar severidad y costos" onClick={()=>setPage('defectos')}/>
         <HC icon="🗑️" title="Scrap" desc="Dashboard de seguimiento de scrap" onClick={()=>{setScrapForm(null);setPage('scrap');}}/>
+        <HC icon="🧩" title="Catálogos" desc="Tipos de asiento, modelos, cuadrantes" onClick={()=>{loadCatalogosAdmin();setPage('catalogos');}}/>
       </div>}
     </div>
   );
@@ -288,8 +365,15 @@ export default function App(){
   // ── UPLOAD ──
   if(page==='upload')return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(165deg,#0F172A,#1E293B 50%,#0F172A)',padding:24}}>
-      <Btn onClick={()=>{setPage('home');setPendingFile(null);setError(null);}} style={{position:'absolute',top:20,left:20}}>← Inicio</Btn>
-      <div style={{textAlign:'center',marginBottom:32}}><h2 style={{fontSize:28,fontWeight:700,color:'#F8FAFC'}}>Nuevo Giro — {linea}</h2><p style={{color:'#94A3B8',fontSize:14}}>Defectos en base: {defectos.length}</p></div>
+      <Btn onClick={()=>{setPage('home');setPendingFile(null);setError(null);setReportesPendientes([]);}} style={{position:'absolute',top:20,left:20}}>← Inicio</Btn>
+      <div style={{textAlign:'center',marginBottom:20}}><h2 style={{fontSize:28,fontWeight:700,color:'#F8FAFC'}}>Nuevo Giro — {linea}</h2><p style={{color:'#94A3B8',fontSize:14}}>Defectos en base: {defectos.length}</p></div>
+
+      <div style={{display:'flex',gap:8,marginBottom:24}}>
+        <Btn bg={giroSource==='excel'?'#F59E0B':'#334155'} color={giroSource==='excel'?'#0F172A':'#94A3B8'} onClick={()=>setGiroSource('excel')}>📄 Importar Excel</Btn>
+        <Btn bg={giroSource==='bd'?'#F59E0B':'#334155'} color={giroSource==='bd'?'#0F172A':'#94A3B8'} onClick={()=>setGiroSource('bd')}>🗄️ Desde Base de Datos (Kiosco)</Btn>
+      </div>
+
+      {giroSource==='excel'?(<>
       {!pendingFile?(
         <div onDragOver={e=>{e.preventDefault();e.stopPropagation();setDragOver(true);}} onDragLeave={e=>{e.preventDefault();setDragOver(false);}} onDrop={e=>{e.preventDefault();setDragOver(false);handleFileDrop(e.dataTransfer?.files?.[0]);}} onClick={()=>fileRef.current?.click()} style={{width:'100%',maxWidth:520,border:`2px dashed ${dragOver?'#F59E0B':'#475569'}`,borderRadius:16,padding:'48px 40px',textAlign:'center',cursor:'pointer',background:dragOver?'rgba(245,158,11,0.06)':'rgba(30,41,59,0.6)'}}>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={e=>{handleFileDrop(e.target?.files?.[0]);e.target.value='';}} style={{display:'none'}}/>
@@ -308,7 +392,68 @@ export default function App(){
           <Btn onClick={handleProcess} disabled={loading} bg={loading?'#475569':'#F59E0B'} color="#0F172A" style={{width:'100%',padding:12,fontSize:15}}>{loading?'Generando...':'Generar Matriz QA'}</Btn>
         </div>
       )}
+      </>):(
+      <div style={{width:'100%',maxWidth:520,background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'1px solid #334155'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+          <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Desde</span><input type="date" value={reportesDesde} onChange={e=>setReportesDesde(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:13}}/></label>
+          <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Hasta</span><input type="date" value={reportesHasta} onChange={e=>setReportesHasta(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:13}}/></label>
+        </div>
+        <Btn onClick={handleBuscarReportes} disabled={loadingReportes} style={{width:'100%',marginBottom:16}}>{loadingReportes?'Buscando...':'🔍 Buscar reportes pendientes'}</Btn>
+        {reportesPendientes.length>0&&<div style={{background:'#0F172A',borderRadius:8,padding:'10px 14px',marginBottom:16,border:'1px solid #16A34A',fontSize:13,color:'#86EFAC'}}>✓ {reportesPendientes.length} reportes encontrados (sin usar en otro giro)</div>}
+        {reportesPendientes.length===0&&(reportesDesde||reportesHasta)&&!loadingReportes&&<div style={{background:'#0F172A',borderRadius:8,padding:'10px 14px',marginBottom:16,border:'1px solid #475569',fontSize:12,color:'#94A3B8'}}>Sin reportes en ese rango, o ya fueron usados</div>}
+
+        <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Nombre del giro</span><input value={giroName} onChange={e=>setGiroName(e.target.value)} placeholder={`Giro ${new Date().toLocaleDateString('es-AR')}`} style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
+        <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#F59E0B',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Bancos controlados *</span><input type="number" min="1" value={bancos} onChange={e=>setBancos(e.target.value)} placeholder="Ej: 5000" style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #F59E0B',background:'#1E293B',color:'#F8FAFC',fontSize:16,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+          <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Piezas totales *</span><input type="number" min="1" value={piezasTotales} onChange={e=>setPiezasTotales(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+          <label style={{display:'block'}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Días trabajados *</span><input type="number" min="1" value={diasTrabajados} onChange={e=>setDiasTrabajados(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+        </div>
+        <label style={{display:'block',marginBottom:24}}><span style={{fontSize:11,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Piezas entregadas al cliente *</span><input type="number" min="1" value={piezasEntregadas} onChange={e=>setPiezasEntregadas(e.target.value)} style={{width:'100%',padding:'9px 12px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>
+        <Btn onClick={handleProcessFromDb} disabled={loading||reportesPendientes.length===0} bg={loading||reportesPendientes.length===0?'#475569':'#F59E0B'} color="#0F172A" style={{width:'100%',padding:12,fontSize:15}}>{loading?'Generando...':'Generar Matriz QA'}</Btn>
+      </div>
+      )}
       {error&&<div style={{marginTop:24,padding:'16px 24px',background:'#7F1D1D',borderRadius:12,color:'#FCA5A5',fontSize:14,maxWidth:520}}>⚠️ {error}</div>}
+    </div>
+  );
+
+  // ── CATÁLOGOS ──
+  if(page==='catalogos')return(
+    <div style={{minHeight:'100vh',padding:24,maxWidth:1000,margin:'0 auto'}}>
+      <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:24}}><Btn onClick={()=>setPage('home')}>← Inicio</Btn><h2 style={{fontSize:22,fontWeight:700,color:'#F8FAFC',margin:0}}>Catálogos — {linea}</h2></div>
+      <p style={{fontSize:12,color:'#64748B',marginBottom:20}}>Estos catálogos alimentan el Módulo de Carga de Defectos (kiosco) para la línea {linea}.</p>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:20}}>
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Tipos de Asiento</h3>
+          <div style={{display:'flex',gap:8,marginBottom:12}}><input value={newTipoAsiento} onChange={e=>setNewTipoAsiento(e.target.value)} placeholder="Ej: Delantero" style={{flex:1,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/><Btn bg="#F59E0B" color="#0F172A" onClick={handleAddTipoAsiento}>+</Btn></div>
+          {tiposAsientoAdmin.map(t=>(<div key={t.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #334155'}}><span style={{fontSize:13,color:'#F8FAFC'}}>{t.nombre}</span><button onClick={()=>handleDeleteTipoAsiento(t.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer'}}>🗑️</button></div>))}
+          {tiposAsientoAdmin.length===0&&<p style={{fontSize:12,color:'#475569'}}>Sin datos</p>}
+        </div>
+
+        <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+          <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Modelos</h3>
+          <div style={{display:'flex',gap:8,marginBottom:12}}><input value={newModelo} onChange={e=>setNewModelo(e.target.value)} placeholder="Ej: Drive" style={{flex:1,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/><Btn bg="#F59E0B" color="#0F172A" onClick={handleAddModelo}>+</Btn></div>
+          {modelosAdmin.map(m=>(<div key={m.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #334155'}}><span style={{fontSize:13,color:'#F8FAFC'}}>{m.nombre}</span><button onClick={()=>handleDeleteModelo(m.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer'}}>🗑️</button></div>))}
+          {modelosAdmin.length===0&&<p style={{fontSize:12,color:'#475569'}}>Sin datos</p>}
+        </div>
+      </div>
+
+      <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
+        <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Cuadrantes (por Tipo de Asiento)</h3>
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          <select value={newCuadrante.tipoAsiento} onChange={e=>setNewCuadrante(p=>({...p,tipoAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Tipo de asiento...</option>{tiposAsientoAdmin.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}</select>
+          <input value={newCuadrante.nombre} onChange={e=>setNewCuadrante(p=>({...p,nombre:e.target.value}))} placeholder="Ej: F1" style={{flex:1,minWidth:120,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/>
+          <Btn bg="#F59E0B" color="#0F172A" onClick={handleAddCuadrante}>+</Btn>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
+          {tiposAsientoAdmin.map(t=>(
+            <div key={t.id} style={{background:'#0F172A',borderRadius:8,padding:10,border:'1px solid #334155'}}>
+              <div style={{fontSize:11,color:'#94A3B8',marginBottom:6,fontWeight:600}}>{t.nombre}</div>
+              {cuadrantesAdmin.filter(c=>c.tipo_asiento===t.nombre).map(c=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:'#F8FAFC'}}>{c.nombre}</span><button onClick={()=>handleDeleteCuadrante(c.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:11}}>✕</button></div>))}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 

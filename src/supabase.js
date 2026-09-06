@@ -50,3 +50,42 @@ export function subscribeScrap(linea, cb) {
   const ch = supabase.channel(`scrap-${linea}`).on('postgres_changes', { event: '*', schema: 'public', table: 'scrap_eventos', filter: `linea=eq.${linea}` }, cb).subscribe();
   return () => supabase.removeChannel(ch);
 }
+
+// ── Catálogos (Tipos de Asiento, Modelos, Cuadrantes) ──
+export const fetchTiposAsiento = async (linea) => { const { data, error } = await supabase.from('tipos_asiento').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
+export const saveTipoAsiento = async (nombre, linea) => { const { data, error } = await supabase.from('tipos_asiento').insert({ nombre, linea }).select().single(); if (error) throw error; return data; };
+export const deleteTipoAsiento = async (id) => { const { error } = await supabase.from('tipos_asiento').delete().eq('id', id); if (error) throw error; };
+
+export const fetchModelos = async (linea) => { const { data, error } = await supabase.from('modelos').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
+export const saveModelo = async (nombre, linea) => { const { data, error } = await supabase.from('modelos').insert({ nombre, linea }).select().single(); if (error) throw error; return data; };
+export const deleteModelo = async (id) => { const { error } = await supabase.from('modelos').delete().eq('id', id); if (error) throw error; };
+
+export const fetchCuadrantes = async (linea) => { const { data, error } = await supabase.from('cuadrantes').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
+export const saveCuadrante = async (nombre, tipoAsiento, linea) => { const { data, error } = await supabase.from('cuadrantes').insert({ nombre, tipo_asiento: tipoAsiento, linea }).select().single(); if (error) throw error; return data; };
+export const deleteCuadrante = async (id) => { const { error } = await supabase.from('cuadrantes').delete().eq('id', id); if (error) throw error; };
+
+// ── Reportes de Defectos (Kiosco — inserta cualquiera, lee/borra solo autenticado) ──
+export const saveReporteDefecto = async (r, linea) => {
+  const { data, error } = await supabase.from('reportes_defectos').insert({
+    linea, secuencia: r.secuencia || null, bsn: r.bsn || null, qr_raw: r.qrRaw || null,
+    deteccion: r.deteccion, tipo_asiento: r.tipoAsiento || null, cuadrante: r.cuadrante || null,
+    modelo: r.modelo || null, componente: r.componente, defecto: r.defecto, defecto_nombre: r.defectoNombre,
+    fecha: r.fecha,
+  }).select().single();
+  if (error) throw error; return data;
+};
+export const fetchReportesDefectos = async (linea, desde, hasta) => {
+  let q = supabase.from('reportes_defectos').select('*').eq('linea', linea).is('giro_id', null);
+  if (desde) q = q.gte('fecha', desde);
+  if (hasta) q = q.lte('fecha', hasta);
+  const { data, error } = await q.order('fecha', { ascending: false });
+  if (error) throw error; return data;
+};
+export const countReportesPendientes = async (linea) => {
+  const { count, error } = await supabase.from('reportes_defectos').select('id', { count: 'exact', head: true }).eq('linea', linea).is('giro_id', null);
+  if (error) throw error; return count || 0;
+};
+export const markReportesAsGiro = async (ids, giroId) => {
+  const { error } = await supabase.from('reportes_defectos').update({ giro_id: giroId }).in('id', ids);
+  if (error) throw error;
+};

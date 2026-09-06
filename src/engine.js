@@ -21,27 +21,46 @@ function parseRows(rows) {
   return recs;
 }
 
+// Shared grouping + S×O×D×C calculation, used by both Excel import and DB-sourced (kiosco) records.
+// records: [{dp, quad, model, comp, def}]
+function buildQaRows(recs, bancosCtrl, defectosDb) {
+  if (recs.length === 0) throw new Error('No se encontraron registros válidos.');
+  const bancos = bancosCtrl || recs.length;
+  const groups = {};
+  for (const r of recs) { const key = `${r.def}||${r.quad}||${r.model}`; if (!groups[key]) groups[key] = { def: r.def, quad: r.quad, model: r.model, comp: r.comp, count: 0, dps: {} }; groups[key].count++; groups[key].dps[r.dp] = (groups[key].dps[r.dp] || 0) + 1; }
+  const qaRows = [];
+  for (const g of Object.values(groups)) {
+    const dbMatch = defectosDb[g.def]; const db = dbMatch || { severidad: 3, costo_interno: 1, costo_externo: 4 }; const sev = db.severidad;
+    let hasI = false, hasE = false; for (const dp of DETECTION_POINTS) { if (g.dps[dp.key] > 0) { if (dp.scope === 'int') hasI = true; else hasE = true; } }
+    const costo = (hasI && hasE) ? Math.max(db.costo_interno, db.costo_externo) : hasE ? db.costo_externo : db.costo_interno;
+    const pct = g.count / bancos, occ = calcOcc(pct); let det = 0; const dpB = {}; for (const dp of DETECTION_POINTS) { if (g.dps[dp.key] > 0) { det += dp.weight; dpB[dp.key] = dp.weight; } } if (det === 0) det = 4;
+    qaRows.push({ concat: `${g.def} en el sector ${g.quad} del modelo ${g.model}`, defectName: g.def, model: g.model, quadrant: g.quad, component: g.comp, severidad: sev, cantDefectos: g.count, ocurrenciaPct: pct, ocurrencia: occ, detectabilidad: det, dpBreakdown: dpB, dpCounts: { ...g.dps }, costo, costoInterno: db.costo_interno, costoExterno: db.costo_externo, index: sev * occ * det * costo, notInDb: !dbMatch });
+  }
+  qaRows.sort((a, b) => b.index - a.index);
+  const totalDef = qaRows.reduce((s, r) => s + r.cantDefectos, 0), totalIdx = qaRows.reduce((s, r) => s + r.index, 0);
+  let cumIdx = 0; for (const r of qaRows) { cumIdx += r.index; const p = cumIdx / totalIdx; r.voz = p <= 0.5 ? 'AA' : p <= 0.7 ? 'A' : p <= 0.9 ? 'B' : 'C'; }
+  qaRows.forEach((r, i) => { r.vozNum = i + 1; });
+  return {
+    qaRows, totalRecords: recs.length, totalDefectTypes: qaRows.length, bancosControlados: bancos, totalDefects: totalDef,
+    summary: { AA: qaRows.filter(r => r.voz === 'AA').length, A: qaRows.filter(r => r.voz === 'A').length, B: qaRows.filter(r => r.voz === 'B').length, C: qaRows.filter(r => r.voz === 'C').length },
+  };
+}
+
 export async function processExcelFile(file, bancosCtrl, defectosDb) {
   const result = await readXlsxFile(file);
   let rows; if(Array.isArray(result)&&result.length>0)rows=(result[0]&&result[0].data)?result[0].data:Array.isArray(result[0])?result:null;
   if(!rows||rows.length<3)throw new Error('El archivo no tiene datos suficientes');
-  const recs=parseRows(rows);if(recs.length===0)throw new Error('No se encontraron registros válidos.');
-  const bancos=bancosCtrl||recs.length;
-  const groups={};
-  for(const r of recs){const key=`${r.def}||${r.quad}||${r.model}`;if(!groups[key])groups[key]={def:r.def,quad:r.quad,model:r.model,comp:r.comp,count:0,dps:{}};groups[key].count++;groups[key].dps[r.dp]=(groups[key].dps[r.dp]||0)+1;}
-  const qaRows=[];
-  for(const g of Object.values(groups)){
-    const dbMatch=defectosDb[g.def];const db=dbMatch||{severidad:3,costo_interno:1,costo_externo:4};const sev=db.severidad;
-    let hasI=false,hasE=false;for(const dp of DETECTION_POINTS){if(g.dps[dp.key]>0){if(dp.scope==='int')hasI=true;else hasE=true;}}
-    const costo=(hasI&&hasE)?Math.max(db.costo_interno,db.costo_externo):hasE?db.costo_externo:db.costo_interno;
-    const pct=g.count/bancos,occ=calcOcc(pct);let det=0;const dpB={};for(const dp of DETECTION_POINTS){if(g.dps[dp.key]>0){det+=dp.weight;dpB[dp.key]=dp.weight;}}if(det===0)det=4;
-    qaRows.push({concat:`${g.def} en el sector ${g.quad} del modelo ${g.model}`,defectName:g.def,model:g.model,quadrant:g.quad,component:g.comp,severidad:sev,cantDefectos:g.count,ocurrenciaPct:pct,ocurrencia:occ,detectabilidad:det,dpBreakdown:dpB,dpCounts:{...g.dps},costo,costoInterno:db.costo_interno,costoExterno:db.costo_externo,index:sev*occ*det*costo,notInDb:!dbMatch});
-  }
-  qaRows.sort((a,b)=>b.index-a.index);
-  const totalDef=qaRows.reduce((s,r)=>s+r.cantDefectos,0),totalIdx=qaRows.reduce((s,r)=>s+r.index,0);
-  let cumIdx=0;for(const r of qaRows){cumIdx+=r.index;const p=cumIdx/totalIdx;r.voz=p<=0.5?'AA':p<=0.7?'A':p<=0.9?'B':'C';}
-  qaRows.forEach((r,i)=>{r.vozNum=i+1;});
-  return{qaRows,totalRecords:recs.length,totalDefectTypes:qaRows.length,bancosControlados:bancos,totalDefects:totalDef,format:rows[0].length>100?'ampliado':'condensado',summary:{AA:qaRows.filter(r=>r.voz==='AA').length,A:qaRows.filter(r=>r.voz==='A').length,B:qaRows.filter(r=>r.voz==='B').length,C:qaRows.filter(r=>r.voz==='C').length}};
+  const recs=parseRows(rows);
+  const res = buildQaRows(recs, bancosCtrl, defectosDb);
+  return { ...res, format: rows[0].length > 100 ? 'ampliado' : 'condensado' };
+}
+
+// Builds a QA giro from reportes_defectos rows (kiosco module) instead of an Excel file.
+// dbRows: rows from Supabase table `reportes_defectos`
+export function buildGiroFromReportes(dbRows, bancosCtrl, defectosDb) {
+  const recs = dbRows.map(r => ({ dp: r.deteccion, quad: r.cuadrante || 'N/A', model: r.modelo || 'N/A', comp: r.componente, def: r.defecto_nombre }));
+  const res = buildQaRows(recs, bancosCtrl, defectosDb);
+  return { ...res, format: 'kiosco' };
 }
 
 export function unifyVoices(qaRows, destNum, origenNums) {
