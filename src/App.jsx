@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { processExcelFile, unifyVoices, buildGiroFromReportes } from './engine';
-import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS } from './config';
+import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS, PARTES_ASIENTO } from './config';
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
@@ -19,7 +19,7 @@ export default function App(){
   const[cuadrantesAdmin,setCuadrantesAdmin]=useState([]);
   const[newTipoAsiento,setNewTipoAsiento]=useState('');
   const[newModelo,setNewModelo]=useState('');
-  const[newCuadrante,setNewCuadrante]=useState({tipoAsiento:'',nombre:''});
+  const[newCuadrante,setNewCuadrante]=useState({tipoAsiento:'',parteAsiento:'',nombre:''});
   const[giroSource,setGiroSource]=useState('excel'); // 'excel' | 'bd'
   const[reportesDesde,setReportesDesde]=useState('');
   const[reportesHasta,setReportesHasta]=useState('');
@@ -209,8 +209,8 @@ export default function App(){
   const handleDeleteModelo=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteModelo(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
 
   const handleAddCuadrante=useCallback(async()=>{
-    if(!newCuadrante.nombre.trim()||!newCuadrante.tipoAsiento)return;
-    try{await saveCuadrante(newCuadrante.nombre.trim(),newCuadrante.tipoAsiento,linea);setNewCuadrante(p=>({...p,nombre:''}));loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
+    if(!newCuadrante.nombre.trim()||!newCuadrante.tipoAsiento||!newCuadrante.parteAsiento)return;
+    try{await saveCuadrante(newCuadrante.nombre.trim(),newCuadrante.tipoAsiento,newCuadrante.parteAsiento,linea);setNewCuadrante(p=>({...p,nombre:''}));loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
   },[newCuadrante,linea,loadCatalogosAdmin]);
   const handleDeleteCuadrante=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteCuadrante(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
 
@@ -439,19 +439,22 @@ export default function App(){
       </div>
 
       <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
-        <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Cuadrantes (por Tipo de Asiento)</h3>
+        <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Cuadrantes (por Tipo de Asiento + Respaldo/Asiento)</h3>
         <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
           <select value={newCuadrante.tipoAsiento} onChange={e=>setNewCuadrante(p=>({...p,tipoAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Tipo de asiento...</option>{tiposAsientoAdmin.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}</select>
-          <input value={newCuadrante.nombre} onChange={e=>setNewCuadrante(p=>({...p,nombre:e.target.value}))} placeholder="Ej: F1" style={{flex:1,minWidth:120,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/>
+          <select value={newCuadrante.parteAsiento} onChange={e=>setNewCuadrante(p=>({...p,parteAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Respaldo/Asiento...</option>{PARTES_ASIENTO.map(p=><option key={p} value={p}>{p}</option>)}</select>
+          <input value={newCuadrante.nombre} onChange={e=>setNewCuadrante(p=>({...p,nombre:e.target.value}))} placeholder="Ej: F2" style={{flex:1,minWidth:120,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/>
           <Btn bg="#F59E0B" color="#0F172A" onClick={handleAddCuadrante}>+</Btn>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
-          {tiposAsientoAdmin.map(t=>(
-            <div key={t.id} style={{background:'#0F172A',borderRadius:8,padding:10,border:'1px solid #334155'}}>
-              <div style={{fontSize:11,color:'#94A3B8',marginBottom:6,fontWeight:600}}>{t.nombre}</div>
-              {cuadrantesAdmin.filter(c=>c.tipo_asiento===t.nombre).map(c=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:'#F8FAFC'}}>{c.nombre}</span><button onClick={()=>handleDeleteCuadrante(c.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:11}}>✕</button></div>))}
-            </div>
-          ))}
+          {tiposAsientoAdmin.flatMap(t=>PARTES_ASIENTO.map(pa=>({t,pa}))).map(({t,pa})=>{
+            const list=cuadrantesAdmin.filter(c=>c.tipo_asiento===t.nombre&&c.parte_asiento===pa);
+            if(list.length===0)return null;
+            return(<div key={`${t.id}-${pa}`} style={{background:'#0F172A',borderRadius:8,padding:10,border:'1px solid #334155'}}>
+              <div style={{fontSize:11,color:'#94A3B8',marginBottom:6,fontWeight:600}}>{t.nombre} · {pa}</div>
+              {list.map(c=>(<div key={c.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:'#F8FAFC'}}>{c.nombre}</span><button onClick={()=>handleDeleteCuadrante(c.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:11}}>✕</button></div>))}
+            </div>);
+          })}
         </div>
       </div>
     </div>

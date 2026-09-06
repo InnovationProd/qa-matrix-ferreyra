@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchLineas, fetchDefectos, fetchTiposAsiento, fetchModelos, fetchCuadrantes, saveReporteDefecto } from './supabase';
-import { DETECTION_POINTS } from './config';
+import { DETECTION_POINTS, PARTES_ASIENTO } from './config';
 import { parseLearQr } from './qrParse';
 import { startQrScanner } from './qrScanner';
 
@@ -23,7 +23,7 @@ export default function KioskApp({ onExit }) {
   const [lineas, setLineas] = useState([]);
   const [linea, setLinea] = useState(null);
   const [step, setStep] = useState(0); // 0 = elegir línea, 1 = QR, 2 = deteccion, 3 = asiento/cuadrante, 4 = modelo, 5 = componente/defecto, 6 = confirmar
-  const [data, setData] = useState({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
+  const [data, setData] = useState({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
   const [tiposAsiento, setTiposAsiento] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [cuadrantes, setCuadrantes] = useState([]);
@@ -50,10 +50,10 @@ export default function KioskApp({ onExit }) {
   const defectosParsed = useMemo(() => defectos.map(d => { const idx = d.nombre.indexOf(' - '); return { ...d, componenteParsed: idx === -1 ? d.nombre : d.nombre.slice(0, idx).trim(), defectoParte: idx === -1 ? '' : d.nombre.slice(idx + 3).trim() }; }), [defectos]);
   const componentesUnicos = useMemo(() => [...new Set(defectosParsed.map(d => d.componenteParsed))].sort((a, b) => a.localeCompare(b)), [defectosParsed]);
   const defectosDelComponente = useMemo(() => defectosParsed.filter(d => d.componenteParsed === data.componente).sort((a, b) => a.defectoParte.localeCompare(b.defectoParte)), [defectosParsed, data.componente]);
-  const cuadrantesDelTipo = useMemo(() => cuadrantes.filter(c => c.tipo_asiento === data.tipoAsiento), [cuadrantes, data.tipoAsiento]);
+  const cuadrantesDelTipo = useMemo(() => cuadrantes.filter(c => c.tipo_asiento === data.tipoAsiento && c.parte_asiento === data.parteAsiento), [cuadrantes, data.tipoAsiento, data.parteAsiento]);
 
   const resetForm = useCallback(() => {
-    setData({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
+    setData({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
     setStep(1);
   }, []);
 
@@ -84,7 +84,7 @@ export default function KioskApp({ onExit }) {
       const defectoNombre = `${data.componente} - ${data.defectoParte}`;
       await saveReporteDefecto({
         secuencia: data.secuencia, bsn: data.bsn, qrRaw: data.qrRaw,
-        deteccion: data.deteccion, tipoAsiento: data.tipoAsiento, cuadrante: data.cuadrante,
+        deteccion: data.deteccion, tipoAsiento: data.tipoAsiento, parteAsiento: data.parteAsiento, cuadrante: data.cuadrante,
         modelo: data.modelo, componente: data.componente, defecto: data.defectoParte, defectoNombre,
         fecha: new Date().toISOString().split('T')[0],
       }, linea);
@@ -164,22 +164,30 @@ export default function KioskApp({ onExit }) {
     </div>
   );
 
-  // Step 3: tipo de asiento + cuadrante
+  // Step 3: tipo de asiento + respaldo/asiento + cuadrante
   if (step === 3) return (
     <div style={wrap}>
       {header('Tipo de Asiento', () => setStep(2))}
       {tiposAsiento.length === 0 ? <p style={{ color: '#DC2626' }}>No hay tipos de asiento cargados para {linea}. Pedile a Calidad que los configure.</p> : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 24 }}>
-          {tiposAsiento.map(t => <BigBtn key={t.id} label={t.nombre} selected={data.tipoAsiento === t.nombre} onClick={() => setData(p => ({ ...p, tipoAsiento: t.nombre, cuadrante: '' }))} />)}
+          {tiposAsiento.map(t => <BigBtn key={t.id} label={t.nombre} selected={data.tipoAsiento === t.nombre} onClick={() => setData(p => ({ ...p, tipoAsiento: t.nombre, parteAsiento: '', cuadrante: '' }))} />)}
         </div>
       )}
       {data.tipoAsiento && (
+        <>
+          <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Respaldo o Asiento</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 24 }}>
+            {PARTES_ASIENTO.map(pa => <BigBtn key={pa} label={pa} selected={data.parteAsiento === pa} onClick={() => setData(p => ({ ...p, parteAsiento: pa, cuadrante: '' }))} />)}
+          </div>
+        </>
+      )}
+      {data.tipoAsiento && data.parteAsiento && (
         <>
           <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Cuadrante</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
             {cuadrantesDelTipo.map(c => <BigBtn key={c.id} label={c.nombre} selected={data.cuadrante === c.nombre} onClick={() => { setData(p => ({ ...p, cuadrante: c.nombre })); setStep(4); }} />)}
           </div>
-          {cuadrantesDelTipo.length === 0 && <p style={{ color: '#94A3B8', fontSize: 12 }}>Sin cuadrantes configurados para este tipo de asiento.</p>}
+          {cuadrantesDelTipo.length === 0 && <p style={{ color: '#94A3B8', fontSize: 12 }}>Sin cuadrantes configurados para {data.tipoAsiento} · {data.parteAsiento}.</p>}
         </>
       )}
     </div>
@@ -225,6 +233,7 @@ export default function KioskApp({ onExit }) {
         <Row l="BSN" v={data.bsn || '—'} />
         <Row l="Lugar de detección" v={data.deteccion} />
         <Row l="Tipo de asiento" v={data.tipoAsiento || '—'} />
+        <Row l="Respaldo/Asiento" v={data.parteAsiento || '—'} />
         <Row l="Cuadrante" v={data.cuadrante || '—'} />
         <Row l="Modelo" v={data.modelo || '—'} />
         <Row l="Componente" v={data.componente} />

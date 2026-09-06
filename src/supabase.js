@@ -61,14 +61,14 @@ export const saveModelo = async (nombre, linea) => { const { data, error } = awa
 export const deleteModelo = async (id) => { const { error } = await supabase.from('modelos').delete().eq('id', id); if (error) throw error; };
 
 export const fetchCuadrantes = async (linea) => { const { data, error } = await supabase.from('cuadrantes').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
-export const saveCuadrante = async (nombre, tipoAsiento, linea) => { const { data, error } = await supabase.from('cuadrantes').insert({ nombre, tipo_asiento: tipoAsiento, linea }).select().single(); if (error) throw error; return data; };
+export const saveCuadrante = async (nombre, tipoAsiento, parteAsiento, linea) => { const { data, error } = await supabase.from('cuadrantes').insert({ nombre, tipo_asiento: tipoAsiento, parte_asiento: parteAsiento, linea }).select().single(); if (error) throw error; return data; };
 export const deleteCuadrante = async (id) => { const { error } = await supabase.from('cuadrantes').delete().eq('id', id); if (error) throw error; };
 
 // ── Reportes de Defectos (Kiosco — inserta cualquiera, lee/borra solo autenticado) ──
 export const saveReporteDefecto = async (r, linea) => {
   const { data, error } = await supabase.from('reportes_defectos').insert({
     linea, secuencia: r.secuencia || null, bsn: r.bsn || null, qr_raw: r.qrRaw || null,
-    deteccion: r.deteccion, tipo_asiento: r.tipoAsiento || null, cuadrante: r.cuadrante || null,
+    deteccion: r.deteccion, tipo_asiento: r.tipoAsiento || null, parte_asiento: r.parteAsiento || null, cuadrante: r.cuadrante || null,
     modelo: r.modelo || null, componente: r.componente, defecto: r.defecto, defecto_nombre: r.defectoNombre,
     fecha: r.fecha,
   }).select().single();
