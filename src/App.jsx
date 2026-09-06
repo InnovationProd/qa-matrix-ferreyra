@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { processExcelFile, unifyVoices, buildGiroFromReportes } from './engine';
-import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS, PARTES_ASIENTO } from './config';
+import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS, PARTES_ASIENTO, todayLocal } from './config';
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, markReportesAsGiro } from './supabase';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#fff',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -123,7 +123,7 @@ export default function App(){
     const pe=parseInt(piezasEntregadas);if(!pe||pe<1){setError('Ingresá la cantidad de piezas entregadas al cliente');return;}
     setLoading(true);setError(null);
     try{const res=await processExcelFile(pendingFile,b,defectosDb);setResult({...res,piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe});const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
-    try{const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0],piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);if(saved?.id){setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
+    try{const saved=await saveGiro({...res,name,date:todayLocal(),piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);if(saved?.id){setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);const pd=await fetchPdcas(saved.id);setPdcaMap(pd);}}catch(e){console.warn(e);}
     setPage('matrix');}catch(err){setError(err.message);}setLoading(false);
   },[pendingFile,bancos,piezasTotales,diasTrabajados,piezasEntregadas,giroName,defectosDb,linea]);
 
@@ -141,7 +141,7 @@ export default function App(){
     const ws=XLSX.utils.aoa_to_sheet(data);
     ws['!cols']=[{wch:45},{wch:12},{wch:14},{wch:14},{wch:12}];
     const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Defectos');
-    XLSX.writeFile(wb,`Defectos_${linea}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb,`Defectos_${linea}_${todayLocal()}.xlsx`);
   },[defectos,occurrenceMap,linea]);
 
   const loadHistory=useCallback(async()=>{try{const g=await fetchGiros(linea);setGiros(g);}catch(e){console.error(e);}setPage('history');},[linea]);
@@ -164,7 +164,7 @@ export default function App(){
     setScrapForm({
       giroId:prefill?.giroId||null,vozNum:prefill?.vozNum||null,
       componente:comp,defectoParte:defParte,
-      fecha:new Date().toISOString().split('T')[0],turno:'A',origen:'Producción',destino:'Scrap',
+      fecha:todayLocal(),turno:'A',origen:'Producción',destino:'Scrap',
       tipoMaterial:'Cuenta Plena',cantidad:1,costoUnitario:'',notas:'',
     });
     setPage('scrap');
@@ -231,11 +231,10 @@ export default function App(){
       const res=buildGiroFromReportes(reportesPendientes,b,defectosDb);
       setResult({...res,piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe});
       const name=giroName||`Giro ${new Date().toLocaleDateString('es-AR')}`;
-      const saved=await saveGiro({...res,name,date:new Date().toISOString().split('T')[0],piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);
+      const saved=await saveGiro({...res,name,date:todayLocal(),piezasTotales:pt,diasTrabajados:dt,piezasEntregadas:pe},linea);
       if(saved?.id){
         setGiroId(saved.id);localStorage.setItem(`activeGiro_${linea}`,saved.id);
         const pd=await fetchPdcas(saved.id);setPdcaMap(pd);
-        await markReportesAsGiro(reportesPendientes.map(r=>r.id),saved.id);
       }
       setPage('matrix');
     }catch(err){setError(err.message);}
@@ -400,7 +399,8 @@ export default function App(){
         </div>
         <Btn onClick={handleBuscarReportes} disabled={loadingReportes} style={{width:'100%',marginBottom:16}}>{loadingReportes?'Buscando...':'🔍 Buscar reportes pendientes'}</Btn>
         {reportesPendientes.length>0&&<div style={{background:'#0F172A',borderRadius:8,padding:'10px 14px',marginBottom:16,border:'1px solid #16A34A',fontSize:13,color:'#86EFAC'}}>✓ {reportesPendientes.length} reportes encontrados (sin usar en otro giro)</div>}
-        {reportesPendientes.length===0&&(reportesDesde||reportesHasta)&&!loadingReportes&&<div style={{background:'#0F172A',borderRadius:8,padding:'10px 14px',marginBottom:16,border:'1px solid #475569',fontSize:12,color:'#94A3B8'}}>Sin reportes en ese rango, o ya fueron usados</div>}
+        {reportesPendientes.length===0&&(reportesDesde||reportesHasta)&&!loadingReportes&&<div style={{background:'#0F172A',borderRadius:8,padding:'10px 14px',marginBottom:16,border:'1px solid #475569',fontSize:12,color:'#94A3B8'}}>Sin reportes en ese rango de fechas</div>}
+        {reportesPendientes.length>0&&<div style={{fontSize:11,color:'#64748B',marginBottom:16}}>Estos reportes pueden reutilizarse en otros giros (ej: un giro semanal y uno mensual que se superponen) sin duplicarse en el mismo giro.</div>}
 
         <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Nombre del giro</span><input value={giroName} onChange={e=>setGiroName(e.target.value)} placeholder={`Giro ${new Date().toLocaleDateString('es-AR')}`} style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
         <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#F59E0B',textTransform:'uppercase',letterSpacing:1,display:'block',marginBottom:6}}>Bancos controlados *</span><input type="number" min="1" value={bancos} onChange={e=>setBancos(e.target.value)} placeholder="Ej: 5000" style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #F59E0B',background:'#1E293B',color:'#F8FAFC',fontSize:16,fontWeight:700,fontFamily:"'IBM Plex Mono'"}}/></label>

@@ -80,7 +80,7 @@ export const saveReporteDefecto = async (r, linea) => {
   return true;
 };
 export const fetchReportesDefectos = async (linea, desde, hasta) => {
-  let q = supabase.from('reportes_defectos').select('*').eq('linea', linea).is('giro_id', null);
+  let q = supabase.from('reportes_defectos').select('*').eq('linea', linea);
   if (desde) q = q.gte('fecha', desde);
   if (hasta) q = q.lte('fecha', hasta);
   const { data, error } = await q.order('fecha', { ascending: false });

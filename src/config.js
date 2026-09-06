@@ -23,3 +23,11 @@ export const DESTINOS = ['Scrap', 'Devolución Proveedor', 'Retrabajo'];
 export const TIPOS_MATERIAL = ['Bailment', 'Cuenta Plena'];
 export const DESTINO_COLORS = { 'Scrap': '#DC2626', 'Devolución Proveedor': '#1D4ED8', 'Retrabajo': '#CA8A04' };
 export const PARTES_ASIENTO = ['Respaldo', 'Asiento'];
+
+// Returns today's date as YYYY-MM-DD using LOCAL time (not UTC, unlike toISOString()).
+// Using toISOString() shifts the date near midnight depending on timezone offset.
+export function todayLocal() {
+  const d = new Date();
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}

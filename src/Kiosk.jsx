@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchLineas, fetchDefectos, fetchTiposAsiento, fetchModelos, fetchCuadrantes, saveReporteDefecto } from './supabase';
-import { DETECTION_POINTS, PARTES_ASIENTO } from './config';
+import { DETECTION_POINTS, PARTES_ASIENTO, todayLocal } from './config';
 import { parseLearQr } from './qrParse';
 import { startQrScanner } from './qrScanner';
 
@@ -86,7 +86,7 @@ export default function KioskApp({ onExit }) {
         secuencia: data.secuencia, bsn: data.bsn, qrRaw: data.qrRaw,
         deteccion: data.deteccion, tipoAsiento: data.tipoAsiento, parteAsiento: data.parteAsiento, cuadrante: data.cuadrante,
         modelo: data.modelo, componente: data.componente, defecto: data.defectoParte, defectoNombre,
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: todayLocal(),
       }, linea);
       setLastSaved(defectoNombre);
       setSessionCount(c => c + 1);
