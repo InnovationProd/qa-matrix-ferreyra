@@ -66,13 +66,18 @@ export const deleteCuadrante = async (id) => { const { error } = await supabase.
 
 // ── Reportes de Defectos (Kiosco — inserta cualquiera, lee/borra solo autenticado) ──
 export const saveReporteDefecto = async (r, linea) => {
-  const { data, error } = await supabase.from('reportes_defectos').insert({
+  const { error } = await supabase.from('reportes_defectos').insert({
     linea, secuencia: r.secuencia || null, bsn: r.bsn || null, qr_raw: r.qrRaw || null,
     deteccion: r.deteccion, tipo_asiento: r.tipoAsiento || null, parte_asiento: r.parteAsiento || null, cuadrante: r.cuadrante || null,
     modelo: r.modelo || null, componente: r.componente, defecto: r.defecto, defecto_nombre: r.defectoNombre,
     fecha: r.fecha,
-  }).select().single();
-  if (error) throw error; return data;
+  });
+  // No .select() here: the kiosco runs unauthenticated (role anon), and the SELECT
+  // policy on this table requires authenticated — requesting the row back after
+  // insert would make PostgREST enforce that SELECT policy on the RETURNING data,
+  // causing a false "row violates row-level security" error even though the insert itself succeeds.
+  if (error) throw error;
+  return true;
 };
 export const fetchReportesDefectos = async (linea, desde, hasta) => {
   let q = supabase.from('reportes_defectos').select('*').eq('linea', linea).is('giro_id', null);
