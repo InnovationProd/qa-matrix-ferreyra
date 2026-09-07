@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { fetchLineas, fetchDefectos, fetchTiposAsiento, fetchModelos, fetchCuadrantes, saveReporteDefecto } from './supabase';
-import { DETECTION_POINTS, PARTES_ASIENTO, todayLocal } from './config';
+import { fetchLineas, fetchDefectos, fetchTiposAsiento, fetchPartesAsiento, fetchModelos, fetchCuadrantes, saveReporteDefecto } from './supabase';
+import { DETECTION_POINTS, todayLocal } from './config';
 import { parseLearQr } from './qrParse';
 import { startQrScanner } from './qrScanner';
 
@@ -25,6 +25,7 @@ export default function KioskApp({ onExit }) {
   const [step, setStep] = useState(0); // 0 = elegir línea, 1 = QR, 2 = deteccion, 3 = asiento/cuadrante, 4 = modelo, 5 = componente/defecto, 6 = confirmar
   const [data, setData] = useState({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
   const [tiposAsiento, setTiposAsiento] = useState([]);
+  const [partesAsiento, setPartesAsiento] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [cuadrantes, setCuadrantes] = useState([]);
   const [defectos, setDefectos] = useState([]);
@@ -42,6 +43,7 @@ export default function KioskApp({ onExit }) {
   useEffect(() => {
     if (!linea) return;
     fetchTiposAsiento(linea).then(setTiposAsiento).catch(console.error);
+    fetchPartesAsiento(linea).then(setPartesAsiento).catch(console.error);
     fetchModelos(linea).then(setModelos).catch(console.error);
     fetchCuadrantes(linea).then(setCuadrantes).catch(console.error);
     fetchDefectos(linea).then(setDefectos).catch(console.error);
@@ -51,6 +53,7 @@ export default function KioskApp({ onExit }) {
   const componentesUnicos = useMemo(() => [...new Set(defectosParsed.map(d => d.componenteParsed))].sort((a, b) => a.localeCompare(b)), [defectosParsed]);
   const defectosDelComponente = useMemo(() => defectosParsed.filter(d => d.componenteParsed === data.componente).sort((a, b) => a.defectoParte.localeCompare(b.defectoParte)), [defectosParsed, data.componente]);
   const cuadrantesDelTipo = useMemo(() => cuadrantes.filter(c => c.tipo_asiento === data.tipoAsiento && c.parte_asiento === data.parteAsiento), [cuadrantes, data.tipoAsiento, data.parteAsiento]);
+  const partesDelTipo = useMemo(() => partesAsiento.filter(p => p.tipo_asiento === data.tipoAsiento), [partesAsiento, data.tipoAsiento]);
 
   const resetForm = useCallback(() => {
     setData({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
@@ -177,8 +180,9 @@ export default function KioskApp({ onExit }) {
         <>
           <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Respaldo o Asiento</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 24 }}>
-            {PARTES_ASIENTO.map(pa => <BigBtn key={pa} label={pa} selected={data.parteAsiento === pa} onClick={() => setData(p => ({ ...p, parteAsiento: pa, cuadrante: '' }))} />)}
+            {partesDelTipo.map(pa => <BigBtn key={pa.id} label={pa.nombre} selected={data.parteAsiento === pa.nombre} onClick={() => setData(p => ({ ...p, parteAsiento: pa.nombre, cuadrante: '' }))} />)}
           </div>
+          {partesDelTipo.length === 0 && <p style={{ color: '#DC2626', fontSize: 12, marginBottom: 24 }}>Sin partes (Respaldo/Asiento) configuradas para {data.tipoAsiento}. Pedile a Calidad que las cargue en Catálogos.</p>}
         </>
       )}
       {data.tipoAsiento && data.parteAsiento && (

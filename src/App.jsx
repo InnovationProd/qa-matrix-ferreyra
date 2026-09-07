@@ -1,10 +1,10 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { processExcelFile, unifyVoices, buildGiroFromReportes } from './engine';
-import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS, PARTES_ASIENTO, todayLocal } from './config';
+import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_COLORS, todayLocal } from './config';
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes } from './supabase';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#fff',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -15,6 +15,8 @@ export default function App(){
   const[authLoading,setAuthLoading]=useState(true);
   const[kioskMode,setKioskMode]=useState(false);
   const[tiposAsientoAdmin,setTiposAsientoAdmin]=useState([]);
+  const[partesAsientoAdmin,setPartesAsientoAdmin]=useState([]);
+  const[newParteAsiento,setNewParteAsiento]=useState({tipoAsiento:'',nombre:''});
   const[modelosAdmin,setModelosAdmin]=useState([]);
   const[cuadrantesAdmin,setCuadrantesAdmin]=useState([]);
   const[newTipoAsiento,setNewTipoAsiento]=useState('');
@@ -191,8 +193,8 @@ export default function App(){
   const loadCatalogosAdmin=useCallback(async()=>{
     if(!linea)return;
     try{
-      const[ta,mo,cu]=await Promise.all([fetchTiposAsiento(linea),fetchModelos(linea),fetchCuadrantes(linea)]);
-      setTiposAsientoAdmin(ta);setModelosAdmin(mo);setCuadrantesAdmin(cu);
+      const[ta,pa,mo,cu]=await Promise.all([fetchTiposAsiento(linea),fetchPartesAsiento(linea),fetchModelos(linea),fetchCuadrantes(linea)]);
+      setTiposAsientoAdmin(ta);setPartesAsientoAdmin(pa);setModelosAdmin(mo);setCuadrantesAdmin(cu);
     }catch(e){console.error(e);}
   },[linea]);
 
@@ -201,6 +203,12 @@ export default function App(){
     try{await saveTipoAsiento(newTipoAsiento.trim(),linea);setNewTipoAsiento('');loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
   },[newTipoAsiento,linea,loadCatalogosAdmin]);
   const handleDeleteTipoAsiento=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deleteTipoAsiento(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
+
+  const handleAddParteAsiento=useCallback(async()=>{
+    if(!newParteAsiento.nombre.trim()||!newParteAsiento.tipoAsiento)return;
+    try{await savePartesAsiento(newParteAsiento.nombre.trim(),newParteAsiento.tipoAsiento,linea);setNewParteAsiento(p=>({...p,nombre:''}));loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}
+  },[newParteAsiento,linea,loadCatalogosAdmin]);
+  const handleDeleteParteAsiento=useCallback(async(id)=>{if(!confirm('¿Eliminar?'))return;try{await deletePartesAsiento(id);loadCatalogosAdmin();}catch(e){alert('Error: '+e.message);}},[loadCatalogosAdmin]);
 
   const handleAddModelo=useCallback(async()=>{
     if(!newModelo.trim())return;
@@ -438,16 +446,37 @@ export default function App(){
         </div>
       </div>
 
+      <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155',marginBottom:20}}>
+        <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Partes de Asiento (Respaldo/Asiento, por Tipo de Asiento)</h3>
+        <p style={{fontSize:11,color:'#64748B',marginBottom:10}}>Ej: Delantero → "Respaldo", "Asiento". Trasero Bipartido → "Respaldo 60%", "Respaldo 40%", "Asiento 60%", "Asiento 40%".</p>
+        <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+          <select value={newParteAsiento.tipoAsiento} onChange={e=>setNewParteAsiento(p=>({...p,tipoAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Tipo de asiento...</option>{tiposAsientoAdmin.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}</select>
+          <input value={newParteAsiento.nombre} onChange={e=>setNewParteAsiento(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Respaldo 60%" style={{flex:1,minWidth:140,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/>
+          <Btn bg="#F59E0B" color="#0F172A" onClick={handleAddParteAsiento}>+</Btn>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))',gap:8}}>
+          {tiposAsientoAdmin.map(t=>{
+            const list=partesAsientoAdmin.filter(p=>p.tipo_asiento===t.nombre);
+            if(list.length===0)return null;
+            return(<div key={t.id} style={{background:'#0F172A',borderRadius:8,padding:10,border:'1px solid #334155'}}>
+              <div style={{fontSize:11,color:'#94A3B8',marginBottom:6,fontWeight:600}}>{t.nombre}</div>
+              {list.map(p=>(<div key={p.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,padding:'3px 0'}}><span style={{color:'#F8FAFC'}}>{p.nombre}</span><button onClick={()=>handleDeleteParteAsiento(p.id)} style={{background:'none',border:'none',color:'#7F1D1D',cursor:'pointer',fontSize:11}}>✕</button></div>))}
+            </div>);
+          })}
+        </div>
+        {partesAsientoAdmin.length===0&&<p style={{fontSize:12,color:'#475569'}}>Sin datos — sin esto, los Cuadrantes no van a tener de qué depender.</p>}
+      </div>
+
       <div style={{background:'#1E293B',borderRadius:12,padding:16,border:'1px solid #334155'}}>
         <h3 style={{fontSize:13,fontWeight:600,color:'#F59E0B',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Cuadrantes (por Tipo de Asiento + Respaldo/Asiento)</h3>
         <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
-          <select value={newCuadrante.tipoAsiento} onChange={e=>setNewCuadrante(p=>({...p,tipoAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Tipo de asiento...</option>{tiposAsientoAdmin.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}</select>
-          <select value={newCuadrante.parteAsiento} onChange={e=>setNewCuadrante(p=>({...p,parteAsiento:e.target.value}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Respaldo/Asiento...</option>{PARTES_ASIENTO.map(p=><option key={p} value={p}>{p}</option>)}</select>
+          <select value={newCuadrante.tipoAsiento} onChange={e=>setNewCuadrante(p=>({...p,tipoAsiento:e.target.value,parteAsiento:''}))} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}><option value="">Tipo de asiento...</option>{tiposAsientoAdmin.map(t=><option key={t.id} value={t.nombre}>{t.nombre}</option>)}</select>
+          <select value={newCuadrante.parteAsiento} onChange={e=>setNewCuadrante(p=>({...p,parteAsiento:e.target.value}))} disabled={!newCuadrante.tipoAsiento} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13,opacity:newCuadrante.tipoAsiento?1:0.5}}><option value="">Respaldo/Asiento...</option>{partesAsientoAdmin.filter(p=>p.tipo_asiento===newCuadrante.tipoAsiento).map(p=><option key={p.id} value={p.nombre}>{p.nombre}</option>)}</select>
           <input value={newCuadrante.nombre} onChange={e=>setNewCuadrante(p=>({...p,nombre:e.target.value}))} placeholder="Ej: F2" style={{flex:1,minWidth:120,padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:13}}/>
           <Btn bg="#F59E0B" color="#0F172A" onClick={handleAddCuadrante}>+</Btn>
         </div>
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
-          {tiposAsientoAdmin.flatMap(t=>PARTES_ASIENTO.map(pa=>({t,pa}))).map(({t,pa})=>{
+          {tiposAsientoAdmin.flatMap(t=>partesAsientoAdmin.filter(p=>p.tipo_asiento===t.nombre).map(p=>({t,pa:p.nombre}))).map(({t,pa})=>{
             const list=cuadrantesAdmin.filter(c=>c.tipo_asiento===t.nombre&&c.parte_asiento===pa);
             if(list.length===0)return null;
             return(<div key={`${t.id}-${pa}`} style={{background:'#0F172A',borderRadius:8,padding:10,border:'1px solid #334155'}}>

@@ -56,6 +56,10 @@ export const fetchTiposAsiento = async (linea) => { const { data, error } = awai
 export const saveTipoAsiento = async (nombre, linea) => { const { data, error } = await supabase.from('tipos_asiento').insert({ nombre, linea }).select().single(); if (error) throw error; return data; };
 export const deleteTipoAsiento = async (id) => { const { error } = await supabase.from('tipos_asiento').delete().eq('id', id); if (error) throw error; };
 
+export const fetchPartesAsiento = async (linea) => { const { data, error } = await supabase.from('partes_asiento').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
+export const savePartesAsiento = async (nombre, tipoAsiento, linea) => { const { data, error } = await supabase.from('partes_asiento').insert({ nombre, tipo_asiento: tipoAsiento, linea }).select().single(); if (error) throw error; return data; };
+export const deletePartesAsiento = async (id) => { const { error } = await supabase.from('partes_asiento').delete().eq('id', id); if (error) throw error; };
+
 export const fetchModelos = async (linea) => { const { data, error } = await supabase.from('modelos').select('*').eq('linea', linea).order('nombre'); if (error) throw error; return data; };
 export const saveModelo = async (nombre, linea) => { const { data, error } = await supabase.from('modelos').insert({ nombre, linea }).select().single(); if (error) throw error; return data; };
 export const deleteModelo = async (id) => { const { error } = await supabase.from('modelos').delete().eq('id', id); if (error) throw error; };
