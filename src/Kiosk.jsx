@@ -10,12 +10,13 @@ const Btn = ({ children, onClick, bg = '#334155', color = '#F8FAFC', style, ...p
 
 const BigBtn = ({ label, sub, selected, onClick }) => (
   <button onClick={onClick} style={{
-    padding: '20px 16px', borderRadius: 12, border: `2px solid ${selected ? '#F59E0B' : '#334155'}`,
+    padding: '12px 12px', borderRadius: 10, border: `2px solid ${selected ? '#F59E0B' : '#334155'}`,
     background: selected ? 'rgba(245,158,11,0.12)' : '#1E293B', color: '#F8FAFC', textAlign: 'left', cursor: 'pointer',
-    fontSize: 16, fontWeight: 700, minHeight: 72, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
+    fontSize: 13, lineHeight: 1.25, fontWeight: 700, minHeight: 56, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
+    wordBreak: 'break-word', overflowWrap: 'anywhere', hyphens: 'auto',
   }}>
     {label}
-    {sub && <span style={{ fontSize: 11, fontWeight: 400, color: '#94A3B8' }}>{sub}</span>}
+    {sub && <span style={{ fontSize: 10, fontWeight: 400, color: '#94A3B8' }}>{sub}</span>}
   </button>
 );
 
@@ -158,7 +159,7 @@ export default function KioskApp({ onExit }) {
   if (step === 2) return (
     <div style={wrap}>
       {header('Lugar de Detección', () => setStep(1))}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 12 }}>
         {DETECTION_POINTS.map(dp => (
           <BigBtn key={dp.key} label={dp.key} sub={dp.scope === 'ext' ? 'Externo' : 'Interno'} selected={data.deteccion === dp.key}
             onClick={() => { setData(p => ({ ...p, deteccion: dp.key })); setStep(3); }} />
@@ -172,14 +173,14 @@ export default function KioskApp({ onExit }) {
     <div style={wrap}>
       {header('Tipo de Asiento', () => setStep(2))}
       {tiposAsiento.length === 0 ? <p style={{ color: '#DC2626' }}>No hay tipos de asiento cargados para {linea}. Pedile a Calidad que los configure.</p> : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 12, marginBottom: 24 }}>
           {tiposAsiento.map(t => <BigBtn key={t.id} label={t.nombre} selected={data.tipoAsiento === t.nombre} onClick={() => setData(p => ({ ...p, tipoAsiento: t.nombre, parteAsiento: '', cuadrante: '' }))} />)}
         </div>
       )}
       {data.tipoAsiento && (
         <>
           <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Respaldo o Asiento</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 24 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 12, marginBottom: 24 }}>
             {partesDelTipo.map(pa => <BigBtn key={pa.id} label={pa.nombre} selected={data.parteAsiento === pa.nombre} onClick={() => setData(p => ({ ...p, parteAsiento: pa.nombre, cuadrante: '' }))} />)}
           </div>
           {partesDelTipo.length === 0 && <p style={{ color: '#DC2626', fontSize: 12, marginBottom: 24 }}>Sin partes (Respaldo/Asiento) configuradas para {data.tipoAsiento}. Pedile a Calidad que las cargue en Catálogos.</p>}
@@ -188,7 +189,7 @@ export default function KioskApp({ onExit }) {
       {data.tipoAsiento && data.parteAsiento && (
         <>
           <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Cuadrante</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: 10 }}>
             {cuadrantesDelTipo.map(c => <BigBtn key={c.id} label={c.nombre} selected={data.cuadrante === c.nombre} onClick={() => { setData(p => ({ ...p, cuadrante: c.nombre })); setStep(4); }} />)}
           </div>
           {cuadrantesDelTipo.length === 0 && <p style={{ color: '#94A3B8', fontSize: 12 }}>Sin cuadrantes configurados para {data.tipoAsiento} · {data.parteAsiento}.</p>}
@@ -201,7 +202,7 @@ export default function KioskApp({ onExit }) {
   if (step === 4) return (
     <div style={wrap}>
       {header('Modelo', () => setStep(3))}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 12 }}>
         {modelos.map(m => <BigBtn key={m.id} label={m.nombre} selected={data.modelo === m.nombre} onClick={() => { setData(p => ({ ...p, modelo: m.nombre })); setStep(5); }} />)}
       </div>
       {modelos.length === 0 && <p style={{ color: '#DC2626' }}>No hay modelos cargados para {linea}.</p>}
@@ -213,13 +214,13 @@ export default function KioskApp({ onExit }) {
     <div style={wrap}>
       {header('Componente y Defecto', () => setStep(4))}
       <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Componente</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 10, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: 10, marginBottom: 24 }}>
         {componentesUnicos.map(c => <BigBtn key={c} label={c} selected={data.componente === c} onClick={() => setData(p => ({ ...p, componente: c, defectoParte: '' }))} />)}
       </div>
       {data.componente && (
         <>
           <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Defecto</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10 }}>
             {defectosDelComponente.map(d => <BigBtn key={d.id} label={d.defectoParte} selected={data.defectoParte === d.defectoParte} onClick={() => { setData(p => ({ ...p, defectoParte: d.defectoParte })); setStep(6); }} />)}
           </div>
         </>
