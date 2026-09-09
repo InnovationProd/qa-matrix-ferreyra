@@ -406,24 +406,24 @@ export default function App(){
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(165deg,#121212,#1F1F23 50%,#121212)',padding:24}}>
       <div style={{textAlign:'center',marginBottom:40}}><div style={{fontSize:14,fontWeight:600,letterSpacing:4,color:'#B91C1C',textTransform:'uppercase',marginBottom:8}}>World Class Manufacturing</div><h1 style={{fontSize:36,fontWeight:700,color:'#FAFAFA',margin:0}}>Data Collector - Quality</h1></div>
       <div style={{display:'flex',gap:20,alignItems:'stretch',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:1080}}>
-        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #52525B',borderTop:'3px solid #B91C1C',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #52525B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
           <div style={{fontSize:44,marginBottom:12}}>📷</div>
           <h2 style={{fontSize:17,fontWeight:700,color:'#FAFAFA',marginBottom:8}}>Cargar Defectos</h2>
           <p style={{fontSize:12,color:'#A1A1AA',marginBottom:18}}>Acceso directo para operarios de planta — sin usuario ni contraseña</p>
           <Btn bg="#27272A" color="#FAFAFA" onClick={()=>setKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar a módulo de carga</Btn>
         </div>
-        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'2px solid #DC2626',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #52525B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
           <div style={{fontSize:44,marginBottom:12}}>🗑️</div>
           <h2 style={{fontSize:17,fontWeight:700,color:'#FAFAFA',marginBottom:8}}>Registrar Scrap</h2>
           <p style={{fontSize:12,color:'#A1A1AA',marginBottom:18}}>Acceso directo para registrar eventos de scrap — sin usuario ni contraseña</p>
-          <Btn bg="#DC2626" color="#FAFAFA" onClick={()=>setScrapKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar a módulo de carga</Btn>
+          <Btn bg="#27272A" color="#FAFAFA" onClick={()=>setScrapKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar a módulo de carga</Btn>
         </div>
         <form onSubmit={handleLogin} style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #3F3F46'}}>
           <h2 style={{fontSize:17,fontWeight:600,color:'#FAFAFA',marginBottom:18,textAlign:'center'}}>Gestión QA — Iniciar sesión</h2>
           <label style={{display:'block',marginBottom:14}}><span style={{fontSize:12,fontWeight:600,color:'#A1A1AA',display:'block',marginBottom:6}}>Email</span><input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #52525B',background:'#1F1F23',color:'#FAFAFA',fontSize:14}}/></label>
           <label style={{display:'block',marginBottom:20}}><span style={{fontSize:12,fontWeight:600,color:'#A1A1AA',display:'block',marginBottom:6}}>Contraseña</span><input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #52525B',background:'#1F1F23',color:'#FAFAFA',fontSize:14}}/></label>
           {authError&&<div style={{padding:'10px 14px',background:'#450A0A',borderRadius:8,color:'#FCA5A5',fontSize:13,marginBottom:14}}>{authError}</div>}
-          <button type="submit" style={{width:'100%',padding:12,background:'#B91C1C',color:'#121212',border:'none',borderRadius:8,fontWeight:700,fontSize:15,cursor:'pointer'}}>Ingresar</button>
+          <button type="submit" style={{width:'100%',padding:12,background:'#27272A',color:'#FAFAFA',border:'1px solid #52525B',borderRadius:8,fontWeight:700,fontSize:15,cursor:'pointer'}}>Ingresar</button>
         </form>
       </div>
     </div>
