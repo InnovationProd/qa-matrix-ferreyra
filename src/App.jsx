@@ -341,7 +341,7 @@ export default function App(){
 
     const fpy=pt>0?((pt-defTotal)/pt*100):null;
     const rework=pt>0?(reworkQty/pt*100):null;
-    const scrapRate=pt>0?(scrapQty/pt*100):null;
+    const scrapRate=pe>0?(scrapQty/pe*100):null;
     const dppm=pe>0?(defAntena/pe*1000000):null;
     const custPpm=pe>0?(defCustomerPPM/pe*1000000):null;
     const ippm=bc>0?(defIPPM/bc*1000000):null;
@@ -559,16 +559,6 @@ export default function App(){
                 </>)}
 
                 <div style={{fontSize:10,color:'#F59E0B',fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:10,borderTop:'1px solid #334155',paddingTop:14}}>Indicadores WCM · {gerDesde===gerHasta?gerDesde:`${gerDesde} → ${gerHasta}`}</div>
-                {kpi?(
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:12}}>
-                    <WcmCard label="FPY" value={kpi.fpy!=null?`${kpi.fpy.toFixed(1)}%`:'—'} color={kpi.fpy>=95?'#16A34A':kpi.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo"/>
-                    <WcmCard label="Rework" value={kpi.rework!=null?`${kpi.rework.toFixed(1)}%`:'—'} color={kpi.rework<=5?'#16A34A':kpi.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo"/>
-                    <WcmCard label="Scrap Rate" value={kpi.scrapQty>0&&kpi.scrapRate!=null?`${kpi.scrapRate.toFixed(1)}%`:'N/D'} color={kpi.scrapQty>0?'#DC2626':'#475569'} sub={`${kpi.scrapQty} pzs`}/>
-                    <WcmCard label="Cust. DPPM" value={kpi.dppm!=null?Math.round(kpi.dppm).toLocaleString():'—'} color="#F59E0B" sub="Antena"/>
-                    <WcmCard label="Cust. PPM" value={kpi.custPpm!=null?Math.round(kpi.custPpm).toLocaleString():'—'} color="#F59E0B" sub="SCA+TDF+Gtía"/>
-                    <WcmCard label="Internal PPM" value={kpi.ippm!=null?Math.round(kpi.ippm).toLocaleString():'—'} color="#38BDF8" sub="IPPM"/>
-                  </div>
-                ):<p style={{color:'#DC2626',fontSize:12,marginBottom:8}}>⚠️ Sin producción cargada para este rango en {L} — cargá los datos abajo.</p>}
 
                 <div style={{background:'#0F172A',borderRadius:10,padding:12,border:'1px dashed #475569',marginBottom:16}}>
                   <div style={{fontSize:10,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Cargar producción diaria</div>
@@ -581,6 +571,17 @@ export default function App(){
                   </div>
                   {kpi&&<p style={{fontSize:9,color:'#64748B',marginTop:8}}>Acumulado del rango: {kpi.pt.toLocaleString()} totales · {kpi.pe.toLocaleString()} entregadas · {kpi.bc.toLocaleString()} bancos</p>}
                 </div>
+
+                {kpi?(
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:16}}>
+                    <WcmCard label="FPY" value={kpi.fpy!=null?`${kpi.fpy.toFixed(1)}%`:'—'} color={kpi.fpy>=95?'#16A34A':kpi.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo"/>
+                    <WcmCard label="Rework" value={kpi.rework!=null?`${kpi.rework.toFixed(1)}%`:'—'} color={kpi.rework<=5?'#16A34A':kpi.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo"/>
+                    <WcmCard label="Scrap Rate" value={kpi.scrapQty>0&&kpi.scrapRate!=null?`${kpi.scrapRate.toFixed(1)}%`:'N/D'} color={kpi.scrapQty>0?'#DC2626':'#475569'} sub={`${kpi.scrapQty} pzs / entregadas`}/>
+                    <WcmCard label="Cust. DPPM" value={kpi.dppm!=null?Math.round(kpi.dppm).toLocaleString():'—'} color="#F59E0B" sub="Antena"/>
+                    <WcmCard label="Cust. PPM" value={kpi.custPpm!=null?Math.round(kpi.custPpm).toLocaleString():'—'} color="#F59E0B" sub="SCA+TDF+Gtía"/>
+                    <WcmCard label="Internal PPM" value={kpi.ippm!=null?Math.round(kpi.ippm).toLocaleString():'—'} color="#38BDF8" sub="IPPM"/>
+                  </div>
+                ):<p style={{color:'#DC2626',fontSize:12,marginBottom:16}}>⚠️ Sin producción cargada para este rango en {L} — cargá los datos arriba.</p>}
 
                 {(<>
                   <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155'}}>
@@ -968,7 +969,7 @@ function calcWcmKpisFromGiro(g, scrapEventos) {
   return {
     fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
     rework: pt > 0 ? (reworkQty / pt * 100) : null,
-    scrapRate: pt > 0 ? (scrapQty / pt * 100) : null,
+    scrapRate: pe > 0 ? (scrapQty / pe * 100) : null,
     dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
     custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
     ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
@@ -998,7 +999,7 @@ function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
   return {
     fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
     rework: pt > 0 ? (reworkQty / pt * 100) : null,
-    scrapRate: pt > 0 ? (scrapQty / pt * 100) : null,
+    scrapRate: pe > 0 ? (scrapQty / pe * 100) : null,
     dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
     custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
     ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
