@@ -27,19 +27,19 @@ button{font-family:inherit;cursor:pointer}
   /* Voice badges keep color */
   .voz-badge { color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .voz-badge[data-voz="AA"] { background: #DC2626 !important; }
-  .voz-badge[data-voz="A"] { background: #EA580C !important; }
-  .voz-badge[data-voz="B"] { background: #CA8A04 !important; }
-  .voz-badge[data-voz="C"] { background: #16A34A !important; }
+  .voz-badge[data-voz="A"] { background: #991B1B !important; }
+  .voz-badge[data-voz="B"] { background: #71717A !important; }
+  .voz-badge[data-voz="C"] { background: #A1A1AA !important; }
   /* Table */
   table { border-collapse: collapse !important; width: 100% !important; font-size: 8pt !important; }
   th { background: #f0f0f0 !important; color: #000 !important; font-size: 7pt !important; padding: 4px 3px !important; border: 1px solid #ccc !important; position: static !important; }
   td { padding: 3px !important; border: 1px solid #ddd !important; font-size: 8pt !important; }
   tr:nth-child(even) { background: #f9f9f9 !important; }
-  /* Index column stays gold */
-  .print-index { color: #B45309 !important; font-weight: 700 !important; }
+  /* Index column */
+  .print-index { color: #B91C1C !important; font-weight: 700 !important; }
   /* Detection points with values */
-  .dp-int { color: #0369A1 !important; }
-  .dp-ext { color: #B45309 !important; }
+  .dp-int { color: #52525B !important; }
+  .dp-ext { color: #B91C1C !important; }
   /* Pareto section */
   .print-pareto { border: 1px solid #ccc !important; padding: 8px !important; }
   /* Header for print */

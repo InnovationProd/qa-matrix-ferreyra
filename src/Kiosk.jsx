@@ -4,19 +4,19 @@ import { DETECTION_POINTS, todayLocal } from './config';
 import { parseLearQr } from './qrParse';
 import { startQrScanner } from './qrScanner';
 
-const Btn = ({ children, onClick, bg = '#334155', color = '#F8FAFC', style, ...p }) => (
+const Btn = ({ children, onClick, bg = '#3F3F46', color = '#FAFAFA', style, ...p }) => (
   <button onClick={onClick} style={{ padding: '10px 20px', background: bg, color, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, ...style }} {...p}>{children}</button>
 );
 
 const BigBtn = ({ label, sub, selected, onClick }) => (
   <button onClick={onClick} style={{
-    padding: '12px 12px', borderRadius: 10, border: `2px solid ${selected ? '#F59E0B' : '#334155'}`,
-    background: selected ? 'rgba(245,158,11,0.12)' : '#1E293B', color: '#F8FAFC', textAlign: 'left', cursor: 'pointer',
+    padding: '12px 12px', borderRadius: 10, border: `2px solid ${selected ? '#B91C1C' : '#3F3F46'}`,
+    background: selected ? 'rgba(245,158,11,0.12)' : '#1F1F23', color: '#FAFAFA', textAlign: 'left', cursor: 'pointer',
     fontSize: 13, lineHeight: 1.25, fontWeight: 700, minHeight: 56, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2,
     wordBreak: 'break-word', overflowWrap: 'anywhere', hyphens: 'auto',
   }}>
     {label}
-    {sub && <span style={{ fontSize: 10, fontWeight: 400, color: '#94A3B8' }}>{sub}</span>}
+    {sub && <span style={{ fontSize: 10, fontWeight: 400, color: '#A1A1AA' }}>{sub}</span>}
   </button>
 );
 
@@ -101,13 +101,13 @@ export default function KioskApp({ onExit }) {
 
   useEffect(() => () => { if (stopScanRef.current) stopScanRef.current(); }, []);
 
-  const wrap = { minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(165deg,#0F172A,#1E293B 50%,#0F172A)', padding: 20 };
+  const wrap = { minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(165deg,#121212,#1F1F23 50%,#121212)', padding: 20 };
   const header = (title, backFn) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
       {backFn && <Btn onClick={backFn} style={{ padding: '8px 14px' }}>←</Btn>}
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: '#F8FAFC', margin: 0, flex: 1 }}>{title}</h2>
-      {sessionCount > 0 && <span style={{ fontSize: 12, color: '#16A34A', fontWeight: 700 }}>✓ {sessionCount} cargados</span>}
-      <Btn onClick={onExit} bg="#7F1D1D" color="#FCA5A5" style={{ fontSize: 11, padding: '6px 12px' }}>Salir</Btn>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: '#FAFAFA', margin: 0, flex: 1 }}>{title}</h2>
+      {sessionCount > 0 && <span style={{ fontSize: 12, color: '#D4D4D8', fontWeight: 700 }}>✓ {sessionCount} cargados</span>}
+      <Btn onClick={onExit} bg="#450A0A" color="#FCA5A5" style={{ fontSize: 11, padding: '6px 12px' }}>Salir</Btn>
     </div>
   );
 
@@ -115,7 +115,7 @@ export default function KioskApp({ onExit }) {
   if (step === 0) return (
     <div style={wrap}>
       {header('Carga de Defectos', null)}
-      <p style={{ color: '#94A3B8', marginBottom: 16, fontSize: 14 }}>Elegí la línea de producción:</p>
+      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Elegí la línea de producción:</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14 }}>
         {lineas.map(l => <BigBtn key={l.id} label={l.id} sub={l.nombre} selected={linea === l.id} onClick={() => { setLinea(l.id); setStep(1); }} />)}
       </div>
@@ -126,17 +126,17 @@ export default function KioskApp({ onExit }) {
   if (step === 1) return (
     <div style={wrap}>
       {header(`Línea ${linea}`, () => setStep(0))}
-      {lastSaved && <div style={{ background: '#14532D', color: '#86EFAC', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✓ Guardado: {lastSaved}</div>}
-      <p style={{ color: '#94A3B8', marginBottom: 16, fontSize: 14 }}>Escaneá el código QR de la etiqueta LEAR (o saltá este paso si no está disponible):</p>
+      {lastSaved && <div style={{ background: '#27272A', color: '#E4E4E7', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✓ Guardado: {lastSaved}</div>}
+      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Escaneá el código QR de la etiqueta LEAR (o saltá este paso si no está disponible):</p>
 
       {!scanning ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
-          <Btn bg="#F59E0B" color="#0F172A" onClick={startScan} style={{ padding: '18px', fontSize: 16 }}>📷 Escanear código QR</Btn>
+          <Btn bg="#B91C1C" color="#121212" onClick={startScan} style={{ padding: '18px', fontSize: 16 }}>📷 Escanear código QR</Btn>
           {(data.secuencia || data.bsn) && (
-            <div style={{ background: '#1E293B', borderRadius: 10, padding: 14, border: '1px solid #16A34A' }}>
-              <div style={{ fontSize: 11, color: '#16A34A', fontWeight: 700, marginBottom: 6 }}>✓ Datos leídos del QR</div>
-              {data.secuencia && <div style={{ fontSize: 13, color: '#F8FAFC' }}>Secuencia: <b>{data.secuencia}</b></div>}
-              {data.bsn && <div style={{ fontSize: 13, color: '#F8FAFC' }}>BSN: <b>{data.bsn}</b></div>}
+            <div style={{ background: '#1F1F23', borderRadius: 10, padding: 14, border: '1px solid #D4D4D8' }}>
+              <div style={{ fontSize: 11, color: '#D4D4D8', fontWeight: 700, marginBottom: 6 }}>✓ Datos leídos del QR</div>
+              {data.secuencia && <div style={{ fontSize: 13, color: '#FAFAFA' }}>Secuencia: <b>{data.secuencia}</b></div>}
+              {data.bsn && <div style={{ fontSize: 13, color: '#FAFAFA' }}>BSN: <b>{data.bsn}</b></div>}
             </div>
           )}
           <Btn onClick={() => setStep(2)} style={{ padding: '14px' }}>{(data.secuencia || data.bsn) ? 'Continuar →' : 'Saltar este paso →'}</Btn>
@@ -144,12 +144,12 @@ export default function KioskApp({ onExit }) {
         </div>
       ) : (
         <div style={{ maxWidth: 500 }}>
-          <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '3px solid #F59E0B' }}>
+          <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '3px solid #B91C1C' }}>
             <video ref={videoRef} style={{ width: '100%', display: 'block' }} muted playsInline />
             <canvas ref={canvasRef} style={{ display: 'none' }} />
           </div>
-          <p style={{ color: '#94A3B8', fontSize: 12, marginTop: 10, textAlign: 'center' }}>Apuntá la cámara al código QR de la etiqueta</p>
-          <Btn onClick={cancelScan} bg="#7F1D1D" color="#FCA5A5" style={{ width: '100%', marginTop: 10 }}>Cancelar</Btn>
+          <p style={{ color: '#A1A1AA', fontSize: 12, marginTop: 10, textAlign: 'center' }}>Apuntá la cámara al código QR de la etiqueta</p>
+          <Btn onClick={cancelScan} bg="#450A0A" color="#FCA5A5" style={{ width: '100%', marginTop: 10 }}>Cancelar</Btn>
         </div>
       )}
     </div>
@@ -179,7 +179,7 @@ export default function KioskApp({ onExit }) {
       )}
       {data.tipoAsiento && (
         <>
-          <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Respaldo o Asiento</h3>
+          <h3 style={{ fontSize: 14, color: '#B91C1C', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Respaldo o Asiento</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 12, marginBottom: 24 }}>
             {partesDelTipo.map(pa => <BigBtn key={pa.id} label={pa.nombre} selected={data.parteAsiento === pa.nombre} onClick={() => setData(p => ({ ...p, parteAsiento: pa.nombre, cuadrante: '' }))} />)}
           </div>
@@ -188,11 +188,11 @@ export default function KioskApp({ onExit }) {
       )}
       {data.tipoAsiento && data.parteAsiento && (
         <>
-          <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Cuadrante</h3>
+          <h3 style={{ fontSize: 14, color: '#B91C1C', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Cuadrante</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: 10 }}>
             {cuadrantesDelTipo.map(c => <BigBtn key={c.id} label={c.nombre} selected={data.cuadrante === c.nombre} onClick={() => { setData(p => ({ ...p, cuadrante: c.nombre })); setStep(4); }} />)}
           </div>
-          {cuadrantesDelTipo.length === 0 && <p style={{ color: '#94A3B8', fontSize: 12 }}>Sin cuadrantes configurados para {data.tipoAsiento} · {data.parteAsiento}.</p>}
+          {cuadrantesDelTipo.length === 0 && <p style={{ color: '#A1A1AA', fontSize: 12 }}>Sin cuadrantes configurados para {data.tipoAsiento} · {data.parteAsiento}.</p>}
         </>
       )}
     </div>
@@ -213,13 +213,13 @@ export default function KioskApp({ onExit }) {
   if (step === 5) return (
     <div style={wrap}>
       {header('Componente y Defecto', () => setStep(4))}
-      <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Componente</h3>
+      <h3 style={{ fontSize: 14, color: '#B91C1C', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Componente</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: 10, marginBottom: 24 }}>
         {componentesUnicos.map(c => <BigBtn key={c} label={c} selected={data.componente === c} onClick={() => setData(p => ({ ...p, componente: c, defectoParte: '' }))} />)}
       </div>
       {data.componente && (
         <>
-          <h3 style={{ fontSize: 14, color: '#F59E0B', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Defecto</h3>
+          <h3 style={{ fontSize: 14, color: '#B91C1C', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Defecto</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10 }}>
             {defectosDelComponente.map(d => <BigBtn key={d.id} label={d.defectoParte} selected={data.defectoParte === d.defectoParte} onClick={() => { setData(p => ({ ...p, defectoParte: d.defectoParte })); setStep(6); }} />)}
           </div>
@@ -232,7 +232,7 @@ export default function KioskApp({ onExit }) {
   if (step === 6) return (
     <div style={wrap}>
       {header('Confirmar Carga', () => setStep(5))}
-      <div style={{ background: '#1E293B', borderRadius: 12, padding: 20, border: '1px solid #334155', maxWidth: 480 }}>
+      <div style={{ background: '#1F1F23', borderRadius: 12, padding: 20, border: '1px solid #3F3F46', maxWidth: 480 }}>
         <Row l="Línea" v={linea} />
         <Row l="Secuencia" v={data.secuencia || '—'} />
         <Row l="BSN" v={data.bsn || '—'} />
@@ -245,7 +245,7 @@ export default function KioskApp({ onExit }) {
         <Row l="Defecto" v={data.defectoParte} highlight />
       </div>
       <div style={{ display: 'flex', gap: 12, marginTop: 20, maxWidth: 480 }}>
-        <Btn bg="#16A34A" color="#fff" onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 16, fontSize: 16 }}>{saving ? 'Guardando...' : '✓ Confirmar y Cargar'}</Btn>
+        <Btn bg="#D4D4D8" color="#FAFAFA" onClick={handleSave} disabled={saving} style={{ flex: 1, padding: 16, fontSize: 16 }}>{saving ? 'Guardando...' : '✓ Confirmar y Cargar'}</Btn>
       </div>
     </div>
   );
@@ -254,8 +254,8 @@ export default function KioskApp({ onExit }) {
 }
 
 function Row({ l, v, highlight }) {
-  return <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #334155' }}>
-    <span style={{ fontSize: 12, color: '#94A3B8' }}>{l}</span>
-    <span style={{ fontSize: 14, fontWeight: 700, color: highlight ? '#F59E0B' : '#F8FAFC' }}>{v}</span>
+  return <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #3F3F46' }}>
+    <span style={{ fontSize: 12, color: '#A1A1AA' }}>{l}</span>
+    <span style={{ fontSize: 14, fontWeight: 700, color: highlight ? '#B91C1C' : '#FAFAFA' }}>{v}</span>
   </div>;
 }

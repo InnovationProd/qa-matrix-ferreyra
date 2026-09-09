@@ -21,7 +21,7 @@ export const TURNOS = ['A', 'B'];
 export const ORIGENES = ['Producción', 'Proveedor'];
 export const DESTINOS = ['Scrap', 'Devolución Proveedor', 'Retrabajo'];
 export const TIPOS_MATERIAL = ['Bailment', 'Cuenta Plena'];
-export const DESTINO_COLORS = { 'Scrap': '#DC2626', 'Devolución Proveedor': '#1D4ED8', 'Retrabajo': '#CA8A04' };
+export const DESTINO_COLORS = { 'Scrap': '#DC2626', 'Devolución Proveedor': '#52525B', 'Retrabajo': '#71717A' };
 export const PARTES_ASIENTO = ['Respaldo', 'Asiento'];
 
 // Returns today's date as YYYY-MM-DD using LOCAL time (not UTC, unlike toISOString()).
