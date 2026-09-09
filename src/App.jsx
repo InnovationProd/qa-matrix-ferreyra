@@ -29,6 +29,10 @@ export default function App(){
   const[reportesHasta,setReportesHasta]=useState('');
   const[reportesPendientes,setReportesPendientes]=useState([]);
   const[loadingReportes,setLoadingReportes]=useState(false);
+  const[gerGirosList,setGerGirosList]=useState({X6S:[],KP1:[]});
+  const[gerGiroData,setGerGiroData]=useState({X6S:null,KP1:null});
+  const[gerScrap,setGerScrap]=useState({X6S:[],KP1:[]});
+  const[gerLoading,setGerLoading]=useState(false);
   const[authError,setAuthError]=useState('');
   const[loginEmail,setLoginEmail]=useState('');
   const[loginPass,setLoginPass]=useState('');
@@ -149,6 +153,29 @@ export default function App(){
   },[defectos,occurrenceMap,linea]);
 
   const loadHistory=useCallback(async()=>{try{const g=await fetchGiros(linea);setGiros(g);}catch(e){console.error(e);}setPage('history');},[linea]);
+
+  const loadGerencial=useCallback(async()=>{
+    setGerLoading(true);
+    try{
+      const LINEAS=['X6S','KP1'];
+      const girosLists={},giroDatas={},scraps={};
+      for(const L of LINEAS){
+        const gs=await fetchGiros(L);girosLists[L]=gs;
+        const savedId=localStorage.getItem(`activeGiro_${L}`);
+        const targetId=(savedId&&gs.some(g=>g.id===savedId))?savedId:(gs[0]?.id||null);
+        giroDatas[L]=targetId?await fetchGiro(targetId):null;
+        scraps[L]=await fetchScrapEventos(L);
+      }
+      setGerGirosList(girosLists);setGerGiroData(giroDatas);setGerScrap(scraps);
+    }catch(e){console.error(e);}
+    setGerLoading(false);
+    setPage('gerencial');
+  },[]);
+
+  const changeGerGiro=useCallback(async(L,giroId)=>{
+    if(!giroId){setGerGiroData(p=>({...p,[L]:null}));return;}
+    try{const g=await fetchGiro(giroId);setGerGiroData(p=>({...p,[L]:g}));}catch(e){alert('Error: '+e.message);}
+  },[]);
   const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
     // Recalculate notInDb flag against current defectos list
     const rows=g.qa_rows.map(r=>({...r,notInDb:!defectosDb[r.defectName]}));
@@ -374,6 +401,7 @@ export default function App(){
         <HC icon="⚙️" title="Defectos" desc="Editar severidad y costos" onClick={()=>setPage('defectos')}/>
         <HC icon="🗑️" title="Scrap" desc="Dashboard de seguimiento de scrap" onClick={()=>{setScrapForm(null);setPage('scrap');}}/>
         <HC icon="🧩" title="Catálogos" desc="Tipos de asiento, modelos, cuadrantes" onClick={()=>{loadCatalogosAdmin();setPage('catalogos');}}/>
+        <HC icon="📈" title="Dashboard Gerencial" desc="X6S vs KP1 — vista unificada" onClick={loadGerencial}/>
       </div>}
     </div>
   );
@@ -432,6 +460,92 @@ export default function App(){
       {error&&<div style={{marginTop:24,padding:'16px 24px',background:'#7F1D1D',borderRadius:12,color:'#FCA5A5',fontSize:14,maxWidth:520}}>⚠️ {error}</div>}
     </div>
   );
+
+  // ── DASHBOARD GERENCIAL ──
+  if(page==='gerencial'){
+    const LINEAS=['X6S','KP1'];
+    const LC={X6S:'#F59E0B',KP1:'#38BDF8'};
+    return(
+      <div style={{minHeight:'100vh',padding:24,maxWidth:1500,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:24}}><Btn onClick={()=>setPage('home')}>← Inicio</Btn><h2 style={{fontSize:22,fontWeight:700,color:'#F8FAFC',margin:0}}>Dashboard Gerencial</h2>{gerLoading&&<span style={{fontSize:12,color:'#94A3B8'}}>Cargando...</span>}</div>
+
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:24}}>
+          {LINEAS.map(L=>{
+            const g=gerGiroData[L];
+            const kpi=g?calcWcmKpisFromGiro(g,gerScrap[L]):null;
+            const scrapAll=gerScrap[L]||[];
+            const scrapOnly=scrapAll.filter(e=>e.destino==='Scrap');
+            const scrapTotalUSD=scrapOnly.reduce((s,e)=>s+Number(e.monto||0),0);
+            const scrapTotalQty=scrapOnly.reduce((s,e)=>s+e.cantidad,0);
+            return(
+              <div key={L} style={{background:'#1E293B',borderRadius:14,padding:20,border:`2px solid ${LC[L]}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
+                  <h3 style={{fontSize:20,fontWeight:700,color:LC[L],margin:0}}>{L}</h3>
+                  <select value={g?.id||''} onChange={e=>changeGerGiro(L,e.target.value)} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12,maxWidth:220}}>
+                    {(gerGirosList[L]||[]).length===0&&<option value="">Sin giros</option>}
+                    {(gerGirosList[L]||[]).map(gi=><option key={gi.id} value={gi.id}>{gi.name} · {gi.date}</option>)}
+                  </select>
+                </div>
+
+                {!g?<p style={{color:'#64748B',fontSize:13,textAlign:'center',padding:30}}>Sin giros cargados para {L}</p>:(<>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))',gap:8,marginBottom:16}}>
+                    <MiniKpi l="Bancos" v={g.bancos_controlados?.toLocaleString()}/>
+                    <MiniKpi l="Defectos" v={g.total_defects}/>
+                    <MiniKpi l="AA" v={g.summary?.AA} c="#DC2626"/>
+                    <MiniKpi l="A" v={g.summary?.A} c="#EA580C"/>
+                    <MiniKpi l="B" v={g.summary?.B} c="#CA8A04"/>
+                    <MiniKpi l="C" v={g.summary?.C} c="#16A34A"/>
+                  </div>
+
+                  {kpi?(
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:16}}>
+                      <WcmCard label="FPY" value={`${kpi.fpy.toFixed(1)}%`} color={kpi.fpy>=95?'#16A34A':kpi.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo"/>
+                      <WcmCard label="Rework" value={`${kpi.rework.toFixed(1)}%`} color={kpi.rework<=5?'#16A34A':kpi.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo"/>
+                      <WcmCard label="Scrap Rate" value={kpi.scrapQty>0?`${kpi.scrapRate.toFixed(1)}%`:'N/D'} color={kpi.scrapQty>0?'#DC2626':'#475569'} sub={`${kpi.scrapQty} pzs`}/>
+                      <WcmCard label="Cust. DPPM" value={Math.round(kpi.dppm).toLocaleString()} color="#F59E0B" sub="Antena"/>
+                      <WcmCard label="Cust. PPM" value={Math.round(kpi.custPpm).toLocaleString()} color="#F59E0B" sub="SCA+TDF+Gtía"/>
+                      <WcmCard label="Internal PPM" value={Math.round(kpi.ippm).toLocaleString()} color="#38BDF8" sub="IPPM"/>
+                    </div>
+                  ):<p style={{color:'#64748B',fontSize:12,marginBottom:16}}>Este giro no tiene datos de piezas cargados — sin indicadores WCM.</p>}
+
+                  <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155'}}>
+                    <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🗑️ Scrap acumulado (todos los eventos)</div>
+                    <div style={{display:'flex',gap:20}}>
+                      <div><div style={{fontSize:22,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapTotalUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div style={{fontSize:10,color:'#64748B'}}>USD</div></div>
+                      <div><div style={{fontSize:22,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapTotalQty}</div><div style={{fontSize:10,color:'#64748B'}}>Piezas</div></div>
+                    </div>
+                  </div>
+                </>)}
+              </div>
+            );
+          })}
+        </div>
+
+        {gerGiroData.X6S&&gerGiroData.KP1&&calcWcmKpisFromGiro(gerGiroData.X6S,gerScrap.X6S)&&calcWcmKpisFromGiro(gerGiroData.KP1,gerScrap.KP1)&&(
+          <div style={{background:'#1E293B',borderRadius:14,padding:20,border:'1px solid #334155'}}>
+            <h3 style={{fontSize:14,fontWeight:600,color:'#F59E0B',marginBottom:16,textTransform:'uppercase',letterSpacing:1}}>Comparativa X6S vs KP1</h3>
+            {['fpy','rework'].map(metric=>{
+              const kx=calcWcmKpisFromGiro(gerGiroData.X6S,gerScrap.X6S),kk=calcWcmKpisFromGiro(gerGiroData.KP1,gerScrap.KP1);
+              const label=metric==='fpy'?'FPY (First Pass Yield)':'Rework Rate';
+              const max=Math.max(kx[metric]||0,kk[metric]||0,1);
+              return(
+                <div key={metric} style={{marginBottom:14}}>
+                  <div style={{fontSize:12,color:'#94A3B8',marginBottom:6}}>{label}</div>
+                  {[['X6S',kx[metric],LC.X6S],['KP1',kk[metric],LC.KP1]].map(([name,val,color])=>(
+                    <div key={name} style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                      <span style={{width:36,fontSize:12,color:'#94A3B8',fontWeight:600}}>{name}</span>
+                      <div style={{flex:1,height:16,background:'#0F172A',borderRadius:4}}><div style={{height:'100%',width:`${(val||0)/max*100}%`,background:color,borderRadius:4}}/></div>
+                      <span style={{width:56,fontSize:12,fontWeight:700,color,fontFamily:"'IBM Plex Mono'",textAlign:'right'}}>{val!=null?`${val.toFixed(1)}%`:'—'}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   // ── CATÁLOGOS ──
   if(page==='catalogos')return(
@@ -705,3 +819,30 @@ export default function App(){
 function HC({icon,title,desc,onClick,hl}){return<div onClick={onClick} style={{background:hl?'#1E3A5F':'#1E293B',borderRadius:16,padding:'32px 24px',border:`1px solid ${hl?'#F59E0B':'#334155'}`,cursor:'pointer',textAlign:'center',transition:'border-color .2s'}} onMouseEnter={e=>e.currentTarget.style.borderColor='#F59E0B'} onMouseLeave={e=>e.currentTarget.style.borderColor=hl?'#F59E0B':'#334155'}><div style={{fontSize:40,marginBottom:12}}>{icon}</div><div style={{fontWeight:700,color:'#F8FAFC',fontSize:18,marginBottom:4}}>{title}</div><div style={{color:hl?'#F59E0B':'#64748B',fontSize:13}}>{desc}</div></div>;}
 function Dt({l,v,m,h}){return<div><div style={{fontSize:9,color:'#64748B',textTransform:'uppercase',letterSpacing:1}}>{l}</div><div style={{fontWeight:600,color:h?'#F59E0B':'#F8FAFC',fontFamily:m?"'IBM Plex Mono',monospace":'inherit',fontSize:m?11:12}}>{v}</div></div>;}
 function WcmCard({label,value,color,sub}){return<div className="print-kpi" style={{background:'#0F172A',borderRadius:8,padding:'10px 12px',border:'1px solid #334155'}}><div style={{fontSize:10,color:'#94A3B8',marginBottom:4}}>{label}</div><div style={{fontSize:20,fontWeight:700,color,fontFamily:"'IBM Plex Mono'"}}>{value}</div><div style={{fontSize:9,color:'#64748B',marginTop:2}}>{sub}</div></div>;}
+function MiniKpi({l,v,c}){return<div style={{background:'#0F172A',borderRadius:8,padding:'8px 10px',border:'1px solid #334155',textAlign:'center'}}><div style={{fontSize:9,color:'#64748B'}}>{l}</div><div style={{fontSize:16,fontWeight:700,color:c||'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{v??'—'}</div></div>;}
+
+// Pure helper: computes WCM indicators for ANY giro row (snake_case, as returned by fetchGiro),
+// used by the Dashboard Gerencial to show KPIs for a selected/past giro of either línea.
+function calcWcmKpisFromGiro(g, scrapEventos) {
+  if (!g || !g.piezas_totales) return null;
+  const qaRows = g.qa_rows || [];
+  const pt = g.piezas_totales, dt = g.dias_trabajados, pe = g.piezas_entregadas, defTotal = g.total_defects, bc = g.bancos_controlados;
+  const dpTotals = {}; for (const r of qaRows) { for (const [k, v] of Object.entries(r.dpCounts || {})) dpTotals[k] = (dpTotals[k] || 0) + v; }
+  const defAntena = dpTotals['Antena'] || 0;
+  const defCustomerPPM = (dpTotals['SCA'] || 0) + (dpTotals['TDF/TTV'] || 0) + (dpTotals['Garantía'] || 0);
+  const defIPPM = dpTotals['IPPM'] || 0;
+  const linkedScrap = (scrapEventos || []).filter(e => e.giro_id === g.id);
+  const scrapQty = linkedScrap.filter(e => e.destino === 'Scrap').reduce((s, e) => s + e.cantidad, 0);
+  const devolQty = linkedScrap.filter(e => e.destino === 'Devolución Proveedor').reduce((s, e) => s + e.cantidad, 0);
+  const scrapUSD = linkedScrap.filter(e => e.destino === 'Scrap').reduce((s, e) => s + Number(e.monto || 0), 0);
+  const reworkQty = Math.max(0, defTotal - scrapQty - devolQty);
+  return {
+    fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
+    rework: pt > 0 ? (reworkQty / pt * 100) : null,
+    scrapRate: pt > 0 ? (scrapQty / pt * 100) : null,
+    dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
+    custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
+    ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
+    scrapQty, scrapUSD, devolQty, reworkQty, defAntena, defCustomerPPM, defIPPM,
+  };
+}
