@@ -524,23 +524,47 @@ export default function App(){
                   )}
 
                   <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155'}}>
-                    <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🗑️ Scrap acumulado (todos los eventos)</div>
-                    <div style={{display:'flex',gap:20,marginBottom:12}}>
-                      <div><div style={{fontSize:22,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapStats.totalScrapUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div style={{fontSize:10,color:'#64748B'}}>USD</div></div>
-                      <div><div style={{fontSize:22,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapStats.totalScrapQty}</div><div style={{fontSize:10,color:'#64748B'}}>Piezas</div></div>
+                    <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🗑️ Scrap (USD) — Acumulado</div>
+                    <div style={{display:'flex',gap:20,marginBottom:14}}>
+                      <div><div style={{fontSize:26,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapStats.totalScrapUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div style={{fontSize:10,color:'#64748B'}}>USD</div></div>
+                      <div><div style={{fontSize:26,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapStats.totalScrapQty}</div><div style={{fontSize:10,color:'#64748B'}}>Piezas</div></div>
                     </div>
+
                     {scrapStats.totalAllUSD>0&&(
-                      <div style={{marginBottom:12}}>
-                        <div style={{fontSize:10,color:'#94A3B8',marginBottom:5}}>Destino final</div>
-                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{DESTINOS.map(d=>{const v=scrapStats.porDestino[d]||0;const pct=v/scrapStats.totalAllUSD*100;return v>0?(<span key={d} style={{fontSize:10,color:'#F8FAFC'}}><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:DESTINO_COLORS[d],marginRight:4}}/>{d}: ${v.toFixed(0)} ({pct.toFixed(0)}%)</span>):null;})}</div>
+                      <div style={{marginBottom:14}}>
+                        <div style={{fontSize:10,color:'#94A3B8',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Destino final del material no conforme (USD)</div>
+                        <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>{DESTINOS.map(d=>{const v=scrapStats.porDestino[d]||0;const pct=v/scrapStats.totalAllUSD*100;return v>0?(<span key={d} style={{fontSize:11,color:'#F8FAFC'}}><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:DESTINO_COLORS[d],marginRight:5}}/>{d}: ${v.toFixed(0)} ({pct.toFixed(1)}%)</span>):null;})}</div>
                       </div>
                     )}
-                    {scrapStats.top5USD.length>0&&(
-                      <div>
-                        <div style={{fontSize:10,color:'#94A3B8',marginBottom:5}}>Top defectos (USD)</div>
-                        {scrapStats.top5USD.map(([name,v],i)=>(<div key={i} style={{fontSize:10,color:'#E2E8F0',display:'flex',justifyContent:'space-between',padding:'2px 0'}}><span>{name}</span><span style={{color:'#F59E0B',fontWeight:700}}>${v.usd.toFixed(0)}</span></div>))}
+
+                    {scrapStats.top5USD.length>0&&(<div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,color:'#F59E0B',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Scrap (USD) — Top 5</div>
+                      {scrapStats.top5USD.map(([name,v],i)=>{const max=scrapStats.top5USD[0][1].usd;return(<div key={i} style={{marginBottom:6}}><div style={{fontSize:10,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:10,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.usd/max*100}%`,background:'#DC2626',borderRadius:2}}/></div><span style={{fontSize:10,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:44,textAlign:'right'}}>${v.usd.toFixed(0)}</span></div></div>);})}
+                    </div>)}
+
+                    {scrapStats.top5Qty.length>0&&(<div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,color:'#38BDF8',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Scrap (Cantidad) — Top 5</div>
+                      {scrapStats.top5Qty.map(([name,v],i)=>{const max=scrapStats.top5Qty[0][1].qty;return(<div key={i} style={{marginBottom:6}}><div style={{fontSize:10,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:10,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.qty/max*100}%`,background:'#38BDF8',borderRadius:2}}/></div><span style={{fontSize:10,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:30,textAlign:'right'}}>{v.qty}</span></div></div>);})}
+                    </div>)}
+
+                    {scrapStats.modoFallaUSD.length>0&&(<div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,color:'#F59E0B',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Modo de falla — más impacto (USD)</div>
+                      {scrapStats.modoFallaUSD.map(([name,v],i)=>{const max=scrapStats.modoFallaUSD[0][1].usd;return(<div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:8,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.usd/max*100}%`,background:'#EA580C',borderRadius:2}}/></div><span style={{fontSize:9,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:40,textAlign:'right'}}>${v.usd.toFixed(0)}</span></div></div>);})}
+                    </div>)}
+
+                    {scrapStats.modoFallaQty.length>0&&(<div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,color:'#38BDF8',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Modo de falla — más impacto (Cantidad)</div>
+                      {scrapStats.modoFallaQty.map(([name,v],i)=>{const max=scrapStats.modoFallaQty[0][1].qty;return(<div key={i} style={{marginBottom:5}}><div style={{fontSize:10,color:'#E2E8F0',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:8,background:'#334155',borderRadius:2}}><div style={{height:'100%',width:`${v.qty/max*100}%`,background:'#0EA5E9',borderRadius:2}}/></div><span style={{fontSize:9,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'",minWidth:26,textAlign:'right'}}>{v.qty}</span></div></div>);})}
+                    </div>)}
+
+                    {scrapStats.trend.length>0&&(<div>
+                      <div style={{fontSize:10,color:'#F59E0B',marginBottom:6,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Scrap Total por día (USD)</div>
+                      <div style={{display:'flex',gap:5,alignItems:'end',height:80,overflowX:'auto'}}>
+                        {scrapStats.trend.map(([d,v],i)=>{const max=Math.max(...scrapStats.trend.map(t=>t[1]));return(<div key={i} title={`${d}: $${v.toFixed(0)}`} style={{display:'flex',flexDirection:'column',alignItems:'center',minWidth:28}}><span style={{fontSize:8,color:'#94A3B8',marginBottom:2}}>${v.toFixed(0)}</span><div style={{width:16,height:`${Math.max(v/max*54,4)}px`,background:'#DC2626',borderRadius:'2px 2px 0 0'}}/><span style={{fontSize:7,color:'#64748B',marginTop:2}}>{d.slice(5)}</span></div>);})}
                       </div>
-                    )}
+                    </div>)}
+
+                    {scrapStats.totalAllUSD===0&&<p style={{fontSize:11,color:'#475569',textAlign:'center',padding:10}}>Sin eventos de scrap para {L}</p>}
                   </div>
                 </>)}
               </div>
@@ -902,7 +926,7 @@ function calcKaizenStatus(qaRows, pdcaMap) {
   return counts;
 }
 
-// Pure helper: full scrap indicator set (destino breakdown, top5, modo de falla) for a list of events.
+// Pure helper: full scrap indicator set (destino breakdown, top5, modo de falla, trend) for a list of events.
 function computeScrapStats(events) {
   const list = events || [];
   const scrapOnly = list.filter(e => e.destino === 'Scrap');
@@ -915,5 +939,10 @@ function computeScrapStats(events) {
   for (const e of scrapOnly) { const key = e.defecto_nombre; if (!byPart[key]) byPart[key] = { usd: 0, qty: 0 }; byPart[key].usd += Number(e.monto || 0); byPart[key].qty += e.cantidad; }
   const top5USD = Object.entries(byPart).sort((a, b) => b[1].usd - a[1].usd).slice(0, 5);
   const top5Qty = Object.entries(byPart).sort((a, b) => b[1].qty - a[1].qty).slice(0, 5);
-  return { totalScrapUSD, totalScrapQty, porDestino, totalAllUSD, top5USD, top5Qty };
+  const modoFallaUSD = Object.entries(byPart).sort((a, b) => b[1].usd - a[1].usd).slice(0, 8);
+  const modoFallaQty = Object.entries(byPart).sort((a, b) => b[1].qty - a[1].qty).slice(0, 8);
+  const byDay = {};
+  for (const e of scrapOnly) byDay[e.fecha] = (byDay[e.fecha] || 0) + Number(e.monto || 0);
+  const trend = Object.entries(byDay).sort((a, b) => a[0].localeCompare(b[0]));
+  return { totalScrapUSD, totalScrapQty, porDestino, totalAllUSD, top5USD, top5Qty, modoFallaUSD, modoFallaQty, trend };
 }
