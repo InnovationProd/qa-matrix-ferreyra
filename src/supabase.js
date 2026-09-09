@@ -104,3 +104,18 @@ export const markReportesAsGiro = async (ids, giroId) => {
   const { error } = await supabase.from('reportes_defectos').update({ giro_id: giroId }).in('id', ids);
   if (error) throw error;
 };
+
+// ── Producción Diaria (para indicadores WCM independientes del Giro) ──
+export const fetchProduccionDiaria = async (linea, desde, hasta) => {
+  let q = supabase.from('produccion_diaria').select('*').eq('linea', linea);
+  if (desde) q = q.gte('fecha', desde);
+  if (hasta) q = q.lte('fecha', hasta);
+  const { data, error } = await q.order('fecha', { ascending: false });
+  if (error) throw error; return data;
+};
+export const upsertProduccionDiaria = async (linea, fecha, d) => {
+  const { data, error } = await supabase.from('produccion_diaria')
+    .upsert({ linea, fecha, piezas_totales: d.piezasTotales, piezas_entregadas: d.piezasEntregadas, bancos_controlados: d.bancosControlados, dias_trabajados: d.diasTrabajados || 1, updated_at: new Date().toISOString() }, { onConflict: 'linea,fecha' })
+    .select().single();
+  if (error) throw error; return data;
+};

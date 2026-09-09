@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
 import ScrapKioskApp from './ScrapKiosk';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes } from './supabase';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, fetchProduccionDiaria, upsertProduccionDiaria } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#fff',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -33,6 +33,14 @@ export default function App(){
   const[gerGiroData,setGerGiroData]=useState({X6S:null,KP1:null});
   const[gerScrap,setGerScrap]=useState({X6S:[],KP1:[]});
   const[gerPdca,setGerPdca]=useState({X6S:{},KP1:{}});
+  const[gerDesde,setGerDesde]=useState(todayLocal());
+  const[gerHasta,setGerHasta]=useState(todayLocal());
+  const[gerReportes,setGerReportes]=useState({X6S:[],KP1:[]});
+  const[gerProduccion,setGerProduccion]=useState({X6S:[],KP1:[]});
+  const[gerDailyForm,setGerDailyForm]=useState({
+    X6S:{fecha:todayLocal(),piezasTotales:'',piezasEntregadas:'',bancosControlados:''},
+    KP1:{fecha:todayLocal(),piezasTotales:'',piezasEntregadas:'',bancosControlados:''},
+  });
   const[gerLoading,setGerLoading]=useState(false);
   const[authError,setAuthError]=useState('');
   const[loginEmail,setLoginEmail]=useState('');
@@ -159,7 +167,7 @@ export default function App(){
     setGerLoading(true);
     try{
       const LINEAS=['X6S','KP1'];
-      const girosLists={},giroDatas={},scraps={},pdcas={};
+      const girosLists={},giroDatas={},scraps={},pdcas={},reportes={},produccion={};
       for(const L of LINEAS){
         const gs=await fetchGiros(L);girosLists[L]=gs;
         const savedId=localStorage.getItem(`activeGiro_${L}`);
@@ -167,12 +175,41 @@ export default function App(){
         giroDatas[L]=targetId?await fetchGiro(targetId):null;
         scraps[L]=await fetchScrapEventos(L);
         pdcas[L]=targetId?await fetchPdcas(targetId):{};
+        reportes[L]=await fetchReportesDefectos(L,gerDesde,gerHasta);
+        produccion[L]=await fetchProduccionDiaria(L,gerDesde,gerHasta);
       }
       setGerGirosList(girosLists);setGerGiroData(giroDatas);setGerScrap(scraps);setGerPdca(pdcas);
+      setGerReportes(reportes);setGerProduccion(produccion);
     }catch(e){console.error(e);}
     setGerLoading(false);
     setPage('gerencial');
+  },[gerDesde,gerHasta]);
+
+  const refetchGerDateRange=useCallback(async(desde,hasta)=>{
+    setGerLoading(true);
+    try{
+      const LINEAS=['X6S','KP1'];
+      const reportes={},produccion={};
+      for(const L of LINEAS){
+        reportes[L]=await fetchReportesDefectos(L,desde,hasta);
+        produccion[L]=await fetchProduccionDiaria(L,desde,hasta);
+      }
+      setGerReportes(reportes);setGerProduccion(produccion);
+    }catch(e){console.error(e);}
+    setGerLoading(false);
   },[]);
+
+  const handleSaveProduccionDiaria=useCallback(async(L)=>{
+    const f=gerDailyForm[L];
+    const pt=parseInt(f.piezasTotales),pe=parseInt(f.piezasEntregadas),bc=parseInt(f.bancosControlados);
+    if(!pt&&!pe&&!bc){alert('Ingresá al menos un valor');return;}
+    try{
+      await upsertProduccionDiaria(L,f.fecha,{piezasTotales:pt||0,piezasEntregadas:pe||0,bancosControlados:bc||0,diasTrabajados:1});
+      const produccion=await fetchProduccionDiaria(L,gerDesde,gerHasta);
+      setGerProduccion(p=>({...p,[L]:produccion}));
+      setGerDailyForm(p=>({...p,[L]:{fecha:todayLocal(),piezasTotales:'',piezasEntregadas:'',bancosControlados:''}}));
+    }catch(e){alert('Error: '+e.message);}
+  },[gerDailyForm,gerDesde,gerHasta]);
 
   const changeGerGiro=useCallback(async(L,giroId)=>{
     if(!giroId){setGerGiroData(p=>({...p,[L]:null}));setGerPdca(p=>({...p,[L]:{}}));return;}
@@ -471,14 +508,23 @@ export default function App(){
     const LC={X6S:'#F59E0B',KP1:'#38BDF8'};
     return(
       <div style={{minHeight:'100vh',padding:24,maxWidth:1500,margin:'0 auto'}}>
-        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:24}}><Btn onClick={()=>setPage('home')}>← Inicio</Btn><h2 style={{fontSize:22,fontWeight:700,color:'#F8FAFC',margin:0}}>Dashboard Gerencial</h2>{gerLoading&&<span style={{fontSize:12,color:'#94A3B8'}}>Cargando...</span>}</div>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:16,flexWrap:'wrap'}}><Btn onClick={()=>setPage('home')}>← Inicio</Btn><h2 style={{fontSize:22,fontWeight:700,color:'#F8FAFC',margin:0}}>Dashboard Gerencial</h2>{gerLoading&&<span style={{fontSize:12,color:'#94A3B8'}}>Cargando...</span>}</div>
+
+        <div style={{display:'flex',gap:10,alignItems:'end',marginBottom:24,background:'#1E293B',padding:14,borderRadius:10,border:'1px solid #334155',flexWrap:'wrap'}}>
+          <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Desde</label><input type="date" value={gerDesde} onChange={e=>{setGerDesde(e.target.value);refetchGerDateRange(e.target.value,gerHasta);}} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}/></div>
+          <div><label style={{fontSize:10,color:'#94A3B8',display:'block',marginBottom:4}}>Hasta</label><input type="date" value={gerHasta} onChange={e=>{setGerHasta(e.target.value);refetchGerDateRange(gerDesde,e.target.value);}} style={{padding:'7px 10px',borderRadius:6,border:'1px solid #475569',background:'#0F172A',color:'#F8FAFC',fontSize:12}}/></div>
+          <Btn onClick={()=>{const t=todayLocal();setGerDesde(t);setGerHasta(t);refetchGerDateRange(t,t);}} style={{fontSize:11}}>Hoy</Btn>
+          <span style={{fontSize:11,color:'#64748B',marginLeft:8}}>Los indicadores WCM y de Scrap se calculan para este rango — independiente del Giro seleccionado abajo</span>
+        </div>
 
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:20,marginBottom:24}}>
           {LINEAS.map(L=>{
             const g=gerGiroData[L];
-            const kpi=g?calcWcmKpisFromGiro(g,gerScrap[L]):null;
-            const scrapStats=computeScrapStats(gerScrap[L]);
+            const scrapInRange=(gerScrap[L]||[]).filter(e=>e.fecha>=gerDesde&&e.fecha<=gerHasta);
+            const kpi=calcWcmKpisDateRange(gerReportes[L],gerProduccion[L],scrapInRange);
+            const scrapStats=computeScrapStats(scrapInRange);
             const kaizen=g?calcKaizenStatus(g.qa_rows,gerPdca[L]):null;
+            const df=gerDailyForm[L];
             return(
               <div key={L} style={{background:'#1E293B',borderRadius:14,padding:20,border:`2px solid ${LC[L]}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
@@ -489,7 +535,7 @@ export default function App(){
                   </select>
                 </div>
 
-                {!g?<p style={{color:'#64748B',fontSize:13,textAlign:'center',padding:30}}>Sin giros cargados para {L}</p>:(<>
+                {!g?<p style={{color:'#64748B',fontSize:12,marginBottom:12}}>Sin giros cargados para {L} — la parte de voces AA/A/B/C y Kaizen no está disponible, pero los indicadores WCM de abajo sí funcionan (son independientes del Giro).</p>:(<>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(90px,1fr))',gap:8,marginBottom:16}}>
                     <MiniKpi l="Bancos" v={g.bancos_controlados?.toLocaleString()}/>
                     <MiniKpi l="Defectos" v={g.total_defects}/>
@@ -498,21 +544,9 @@ export default function App(){
                     <MiniKpi l="B" v={g.summary?.B} c="#CA8A04"/>
                     <MiniKpi l="C" v={g.summary?.C} c="#16A34A"/>
                   </div>
-
-                  {kpi?(
-                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:16}}>
-                      <WcmCard label="FPY" value={`${kpi.fpy.toFixed(1)}%`} color={kpi.fpy>=95?'#16A34A':kpi.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo"/>
-                      <WcmCard label="Rework" value={`${kpi.rework.toFixed(1)}%`} color={kpi.rework<=5?'#16A34A':kpi.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo"/>
-                      <WcmCard label="Scrap Rate" value={kpi.scrapQty>0?`${kpi.scrapRate.toFixed(1)}%`:'N/D'} color={kpi.scrapQty>0?'#DC2626':'#475569'} sub={`${kpi.scrapQty} pzs`}/>
-                      <WcmCard label="Cust. DPPM" value={Math.round(kpi.dppm).toLocaleString()} color="#F59E0B" sub="Antena"/>
-                      <WcmCard label="Cust. PPM" value={Math.round(kpi.custPpm).toLocaleString()} color="#F59E0B" sub="SCA+TDF+Gtía"/>
-                      <WcmCard label="Internal PPM" value={Math.round(kpi.ippm).toLocaleString()} color="#38BDF8" sub="IPPM"/>
-                    </div>
-                  ):<p style={{color:'#64748B',fontSize:12,marginBottom:16}}>Este giro no tiene datos de piezas cargados — sin indicadores WCM.</p>}
-
                   {kaizen&&(
-                    <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155',marginBottom:12}}>
-                      <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🔄 Estado Proyectos Kaizen (PDCA)</div>
+                    <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155',marginBottom:16}}>
+                      <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🔄 Estado Proyectos Kaizen (PDCA) — Giro seleccionado</div>
                       <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
                         <MiniKpi l="Plan" v={kaizen.P} c="#38BDF8"/>
                         <MiniKpi l="Do" v={kaizen.D} c="#F59E0B"/>
@@ -522,7 +556,33 @@ export default function App(){
                       </div>
                     </div>
                   )}
+                </>)}
 
+                <div style={{fontSize:10,color:'#F59E0B',fontWeight:600,textTransform:'uppercase',letterSpacing:1,marginBottom:10,borderTop:'1px solid #334155',paddingTop:14}}>Indicadores WCM · {gerDesde===gerHasta?gerDesde:`${gerDesde} → ${gerHasta}`}</div>
+                {kpi?(
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:12}}>
+                    <WcmCard label="FPY" value={kpi.fpy!=null?`${kpi.fpy.toFixed(1)}%`:'—'} color={kpi.fpy>=95?'#16A34A':kpi.fpy>=85?'#CA8A04':'#DC2626'} sub="Sin retrabajo"/>
+                    <WcmCard label="Rework" value={kpi.rework!=null?`${kpi.rework.toFixed(1)}%`:'—'} color={kpi.rework<=5?'#16A34A':kpi.rework<=15?'#CA8A04':'#DC2626'} sub="Retrabajo"/>
+                    <WcmCard label="Scrap Rate" value={kpi.scrapQty>0&&kpi.scrapRate!=null?`${kpi.scrapRate.toFixed(1)}%`:'N/D'} color={kpi.scrapQty>0?'#DC2626':'#475569'} sub={`${kpi.scrapQty} pzs`}/>
+                    <WcmCard label="Cust. DPPM" value={kpi.dppm!=null?Math.round(kpi.dppm).toLocaleString():'—'} color="#F59E0B" sub="Antena"/>
+                    <WcmCard label="Cust. PPM" value={kpi.custPpm!=null?Math.round(kpi.custPpm).toLocaleString():'—'} color="#F59E0B" sub="SCA+TDF+Gtía"/>
+                    <WcmCard label="Internal PPM" value={kpi.ippm!=null?Math.round(kpi.ippm).toLocaleString():'—'} color="#38BDF8" sub="IPPM"/>
+                  </div>
+                ):<p style={{color:'#DC2626',fontSize:12,marginBottom:8}}>⚠️ Sin producción cargada para este rango en {L} — cargá los datos abajo.</p>}
+
+                <div style={{background:'#0F172A',borderRadius:10,padding:12,border:'1px dashed #475569',marginBottom:16}}>
+                  <div style={{fontSize:10,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Cargar producción diaria</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr auto',gap:6,alignItems:'end'}}>
+                    <div><label style={{fontSize:9,color:'#64748B'}}>Fecha</label><input type="date" value={df.fecha} onChange={e=>setGerDailyForm(p=>({...p,[L]:{...p[L],fecha:e.target.value}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:11}}/></div>
+                    <div><label style={{fontSize:9,color:'#64748B'}}>Piezas Tot.</label><input type="number" value={df.piezasTotales} onChange={e=>setGerDailyForm(p=>({...p,[L]:{...p[L],piezasTotales:e.target.value}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:11}}/></div>
+                    <div><label style={{fontSize:9,color:'#64748B'}}>Entregadas</label><input type="number" value={df.piezasEntregadas} onChange={e=>setGerDailyForm(p=>({...p,[L]:{...p[L],piezasEntregadas:e.target.value}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:11}}/></div>
+                    <div><label style={{fontSize:9,color:'#64748B'}}>Bancos</label><input type="number" value={df.bancosControlados} onChange={e=>setGerDailyForm(p=>({...p,[L]:{...p[L],bancosControlados:e.target.value}}))} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:11}}/></div>
+                    <Btn bg="#F59E0B" color="#0F172A" onClick={()=>handleSaveProduccionDiaria(L)} style={{padding:'6px 12px',fontSize:11}}>✓</Btn>
+                  </div>
+                  {kpi&&<p style={{fontSize:9,color:'#64748B',marginTop:8}}>Acumulado del rango: {kpi.pt.toLocaleString()} totales · {kpi.pe.toLocaleString()} entregadas · {kpi.bc.toLocaleString()} bancos</p>}
+                </div>
+
+                {(<>
                   <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155'}}>
                     <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🗑️ Scrap (USD) — Acumulado</div>
                     <div style={{display:'flex',gap:20,marginBottom:14}}>
@@ -572,11 +632,16 @@ export default function App(){
           })}
         </div>
 
-        {gerGiroData.X6S&&gerGiroData.KP1&&calcWcmKpisFromGiro(gerGiroData.X6S,gerScrap.X6S)&&calcWcmKpisFromGiro(gerGiroData.KP1,gerScrap.KP1)&&(
+        {(()=>{
+          const scrapX=(gerScrap.X6S||[]).filter(e=>e.fecha>=gerDesde&&e.fecha<=gerHasta);
+          const scrapK=(gerScrap.KP1||[]).filter(e=>e.fecha>=gerDesde&&e.fecha<=gerHasta);
+          const kx=calcWcmKpisDateRange(gerReportes.X6S,gerProduccion.X6S,scrapX);
+          const kk=calcWcmKpisDateRange(gerReportes.KP1,gerProduccion.KP1,scrapK);
+          if(!kx||!kk)return null;
+          return(
           <div style={{background:'#1E293B',borderRadius:14,padding:20,border:'1px solid #334155'}}>
-            <h3 style={{fontSize:14,fontWeight:600,color:'#F59E0B',marginBottom:16,textTransform:'uppercase',letterSpacing:1}}>Comparativa X6S vs KP1</h3>
+            <h3 style={{fontSize:14,fontWeight:600,color:'#F59E0B',marginBottom:16,textTransform:'uppercase',letterSpacing:1}}>Comparativa X6S vs KP1 — {gerDesde===gerHasta?gerDesde:`${gerDesde} → ${gerHasta}`}</h3>
             {['fpy','rework'].map(metric=>{
-              const kx=calcWcmKpisFromGiro(gerGiroData.X6S,gerScrap.X6S),kk=calcWcmKpisFromGiro(gerGiroData.KP1,gerScrap.KP1);
               const label=metric==='fpy'?'FPY (First Pass Yield)':'Rework Rate';
               const max=Math.max(kx[metric]||0,kk[metric]||0,1);
               return(
@@ -593,7 +658,8 @@ export default function App(){
               );
             })}
           </div>
-        )}
+          );
+        })()}
       </div>
     );
   }
@@ -910,7 +976,35 @@ function calcWcmKpisFromGiro(g, scrapEventos) {
   };
 }
 
-// Pure helper: classifies each voz's PDCA progress into a single current stage (P/D/C/A),
+// Pure helper: WCM indicators computed from a DATE RANGE (not a giro), using raw reportes_defectos
+// counts + daily production entries + scrap events. Used by Dashboard Gerencial.
+function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
+  const pt = (produccionRows || []).reduce((s, r) => s + (r.piezas_totales || 0), 0);
+  const pe = (produccionRows || []).reduce((s, r) => s + (r.piezas_entregadas || 0), 0);
+  const bc = (produccionRows || []).reduce((s, r) => s + (r.bancos_controlados || 0), 0);
+  if (pt === 0 && pe === 0 && bc === 0) return null;
+  const defTotal = (reportes || []).length;
+  const dpTotals = {};
+  for (const r of (reportes || [])) dpTotals[r.deteccion] = (dpTotals[r.deteccion] || 0) + 1;
+  const defAntena = dpTotals['Antena'] || 0;
+  const defCustomerPPM = (dpTotals['SCA'] || 0) + (dpTotals['TDF/TTV'] || 0) + (dpTotals['Garantía'] || 0);
+  const defIPPM = dpTotals['IPPM'] || 0;
+  const scrapOnly = (scrapEventsInRange || []).filter(e => e.destino === 'Scrap');
+  const devolOnly = (scrapEventsInRange || []).filter(e => e.destino === 'Devolución Proveedor');
+  const scrapQty = scrapOnly.reduce((s, e) => s + e.cantidad, 0);
+  const devolQty = devolOnly.reduce((s, e) => s + e.cantidad, 0);
+  const scrapUSD = scrapOnly.reduce((s, e) => s + Number(e.monto || 0), 0);
+  const reworkQty = Math.max(0, defTotal - scrapQty - devolQty);
+  return {
+    fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
+    rework: pt > 0 ? (reworkQty / pt * 100) : null,
+    scrapRate: pt > 0 ? (scrapQty / pt * 100) : null,
+    dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
+    custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
+    ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
+    scrapQty, scrapUSD, devolQty, reworkQty, defAntena, defCustomerPPM, defIPPM, defTotal, pt, pe, bc,
+  };
+}
 // based on the highest checkbox marked true. Used by both Matriz QA and Dashboard Gerencial.
 function calcKaizenStatus(qaRows, pdcaMap) {
   const counts = { P: 0, D: 0, C: 0, A: 0, sinIniciar: 0 };
