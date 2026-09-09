@@ -146,7 +146,7 @@ export default function ScrapKioskApp({ onExit }) {
           </div>
         </>
       )}
-      <Btn bg="#B91C1C" color="#121212" onClick={() => setStep(3)} style={{ marginTop: 24, padding: 14 }}>Continuar →</Btn>
+      <Btn bg="#27272A" color="#FAFAFA" onClick={() => setStep(3)} style={{ marginTop: 24, padding: 14 }}>Continuar →</Btn>
     </div>
   );
 
@@ -157,7 +157,7 @@ export default function ScrapKioskApp({ onExit }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(110px,1fr))', gap: 10, marginBottom: 24 }}>
         {modelos.map(m => <BigBtn key={m.id} label={m.nombre} selected={data.modelo === m.nombre} onClick={() => setData(p => ({ ...p, modelo: m.nombre }))} />)}
       </div>
-      <Btn bg="#B91C1C" color="#121212" onClick={() => setStep(4)} style={{ padding: 14 }}>Continuar →</Btn>
+      <Btn bg="#27272A" color="#FAFAFA" onClick={() => setStep(4)} style={{ padding: 14 }}>Continuar →</Btn>
     </div>
   );
 
@@ -191,7 +191,7 @@ export default function ScrapKioskApp({ onExit }) {
         <label><span style={{ fontSize: 11, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Cantidad</span><input type="number" inputMode="numeric" min="1" value={data.cantidad} onChange={e => setData(p => ({ ...p, cantidad: e.target.value }))} style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #52525B', background: '#1F1F23', color: '#FAFAFA', fontSize: 16, fontWeight: 700 }} /></label>
         <label><span style={{ fontSize: 11, color: '#B91C1C', display: 'block', marginBottom: 6 }}>Costo unit. (USD)</span><input type="number" inputMode="decimal" min="0" step="0.01" value={data.costoUnitario} onChange={e => setData(p => ({ ...p, costoUnitario: e.target.value }))} placeholder="Ej: 12.50" style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #B91C1C', background: '#1F1F23', color: '#FAFAFA', fontSize: 16, fontWeight: 700 }} /></label>
       </div>
-      <Btn bg="#B91C1C" color="#121212" onClick={() => setStep(5)} style={{ marginTop: 24, padding: 14, maxWidth: 400 }}>Continuar →</Btn>
+      <Btn bg="#27272A" color="#FAFAFA" onClick={() => setStep(5)} style={{ marginTop: 24, padding: 14, maxWidth: 400 }}>Continuar →</Btn>
     </div>
   );
 

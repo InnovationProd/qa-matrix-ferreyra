@@ -131,7 +131,7 @@ export default function KioskApp({ onExit }) {
 
       {!scanning ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
-          <Btn bg="#B91C1C" color="#121212" onClick={startScan} style={{ padding: '18px', fontSize: 16 }}>📷 Escanear código QR</Btn>
+          <Btn bg="#27272A" color="#FAFAFA" onClick={startScan} style={{ padding: '18px', fontSize: 16 }}>📷 Escanear código QR</Btn>
           {(data.secuencia || data.bsn) && (
             <div style={{ background: '#1F1F23', borderRadius: 10, padding: 14, border: '1px solid #D4D4D8' }}>
               <div style={{ fontSize: 11, color: '#D4D4D8', fontWeight: 700, marginBottom: 6 }}>✓ Datos leídos del QR</div>
