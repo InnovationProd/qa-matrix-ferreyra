@@ -32,6 +32,7 @@ export default function App(){
   const[gerGirosList,setGerGirosList]=useState({X6S:[],KP1:[]});
   const[gerGiroData,setGerGiroData]=useState({X6S:null,KP1:null});
   const[gerScrap,setGerScrap]=useState({X6S:[],KP1:[]});
+  const[gerPdca,setGerPdca]=useState({X6S:{},KP1:{}});
   const[gerLoading,setGerLoading]=useState(false);
   const[authError,setAuthError]=useState('');
   const[loginEmail,setLoginEmail]=useState('');
@@ -158,23 +159,24 @@ export default function App(){
     setGerLoading(true);
     try{
       const LINEAS=['X6S','KP1'];
-      const girosLists={},giroDatas={},scraps={};
+      const girosLists={},giroDatas={},scraps={},pdcas={};
       for(const L of LINEAS){
         const gs=await fetchGiros(L);girosLists[L]=gs;
         const savedId=localStorage.getItem(`activeGiro_${L}`);
         const targetId=(savedId&&gs.some(g=>g.id===savedId))?savedId:(gs[0]?.id||null);
         giroDatas[L]=targetId?await fetchGiro(targetId):null;
         scraps[L]=await fetchScrapEventos(L);
+        pdcas[L]=targetId?await fetchPdcas(targetId):{};
       }
-      setGerGirosList(girosLists);setGerGiroData(giroDatas);setGerScrap(scraps);
+      setGerGirosList(girosLists);setGerGiroData(giroDatas);setGerScrap(scraps);setGerPdca(pdcas);
     }catch(e){console.error(e);}
     setGerLoading(false);
     setPage('gerencial');
   },[]);
 
   const changeGerGiro=useCallback(async(L,giroId)=>{
-    if(!giroId){setGerGiroData(p=>({...p,[L]:null}));return;}
-    try{const g=await fetchGiro(giroId);setGerGiroData(p=>({...p,[L]:g}));}catch(e){alert('Error: '+e.message);}
+    if(!giroId){setGerGiroData(p=>({...p,[L]:null}));setGerPdca(p=>({...p,[L]:{}}));return;}
+    try{const g=await fetchGiro(giroId);setGerGiroData(p=>({...p,[L]:g}));const pd=await fetchPdcas(giroId);setGerPdca(p=>({...p,[L]:pd}));}catch(e){alert('Error: '+e.message);}
   },[]);
   const loadGiro=useCallback(async(id)=>{try{setLoading(true);const g=await fetchGiro(id);const pd=await fetchPdcas(id);
     // Recalculate notInDb flag against current defectos list
@@ -310,6 +312,8 @@ export default function App(){
 
     return{fpy,rework,scrapRate,scrapQty,scrapUSD,devolQty,reworkQty,dppm,custPpm,ippm,piezasDia,defAntena,defCustomerPPM,defIPPM};
   },[result,scrapEventos,giroId]);
+
+  const kaizenStatus=useMemo(()=>result?calcKaizenStatus(result.qaRows,pdcaMap):null,[result,pdcaMap]);
 
   const scrapFiltered=useMemo(()=>{
     let list=scrapEventos;
@@ -473,10 +477,8 @@ export default function App(){
           {LINEAS.map(L=>{
             const g=gerGiroData[L];
             const kpi=g?calcWcmKpisFromGiro(g,gerScrap[L]):null;
-            const scrapAll=gerScrap[L]||[];
-            const scrapOnly=scrapAll.filter(e=>e.destino==='Scrap');
-            const scrapTotalUSD=scrapOnly.reduce((s,e)=>s+Number(e.monto||0),0);
-            const scrapTotalQty=scrapOnly.reduce((s,e)=>s+e.cantidad,0);
+            const scrapStats=computeScrapStats(gerScrap[L]);
+            const kaizen=g?calcKaizenStatus(g.qa_rows,gerPdca[L]):null;
             return(
               <div key={L} style={{background:'#1E293B',borderRadius:14,padding:20,border:`2px solid ${LC[L]}`}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16,flexWrap:'wrap',gap:8}}>
@@ -508,12 +510,37 @@ export default function App(){
                     </div>
                   ):<p style={{color:'#64748B',fontSize:12,marginBottom:16}}>Este giro no tiene datos de piezas cargados — sin indicadores WCM.</p>}
 
+                  {kaizen&&(
+                    <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155',marginBottom:12}}>
+                      <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🔄 Estado Proyectos Kaizen (PDCA)</div>
+                      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+                        <MiniKpi l="Plan" v={kaizen.P} c="#38BDF8"/>
+                        <MiniKpi l="Do" v={kaizen.D} c="#F59E0B"/>
+                        <MiniKpi l="Check" v={kaizen.C} c="#A855F7"/>
+                        <MiniKpi l="Act" v={kaizen.A} c="#16A34A"/>
+                        <MiniKpi l="Sin iniciar" v={kaizen.sinIniciar} c="#475569"/>
+                      </div>
+                    </div>
+                  )}
+
                   <div style={{background:'#0F172A',borderRadius:10,padding:14,border:'1px solid #334155'}}>
                     <div style={{fontSize:11,color:'#94A3B8',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🗑️ Scrap acumulado (todos los eventos)</div>
-                    <div style={{display:'flex',gap:20}}>
-                      <div><div style={{fontSize:22,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapTotalUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div style={{fontSize:10,color:'#64748B'}}>USD</div></div>
-                      <div><div style={{fontSize:22,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapTotalQty}</div><div style={{fontSize:10,color:'#64748B'}}>Piezas</div></div>
+                    <div style={{display:'flex',gap:20,marginBottom:12}}>
+                      <div><div style={{fontSize:22,fontWeight:700,color:'#DC2626',fontFamily:"'IBM Plex Mono'"}}>${scrapStats.totalScrapUSD.toLocaleString(undefined,{maximumFractionDigits:0})}</div><div style={{fontSize:10,color:'#64748B'}}>USD</div></div>
+                      <div><div style={{fontSize:22,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{scrapStats.totalScrapQty}</div><div style={{fontSize:10,color:'#64748B'}}>Piezas</div></div>
                     </div>
+                    {scrapStats.totalAllUSD>0&&(
+                      <div style={{marginBottom:12}}>
+                        <div style={{fontSize:10,color:'#94A3B8',marginBottom:5}}>Destino final</div>
+                        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{DESTINOS.map(d=>{const v=scrapStats.porDestino[d]||0;const pct=v/scrapStats.totalAllUSD*100;return v>0?(<span key={d} style={{fontSize:10,color:'#F8FAFC'}}><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:DESTINO_COLORS[d],marginRight:4}}/>{d}: ${v.toFixed(0)} ({pct.toFixed(0)}%)</span>):null;})}</div>
+                      </div>
+                    )}
+                    {scrapStats.top5USD.length>0&&(
+                      <div>
+                        <div style={{fontSize:10,color:'#94A3B8',marginBottom:5}}>Top defectos (USD)</div>
+                        {scrapStats.top5USD.map(([name,v],i)=>(<div key={i} style={{fontSize:10,color:'#E2E8F0',display:'flex',justifyContent:'space-between',padding:'2px 0'}}><span>{name}</span><span style={{color:'#F59E0B',fontWeight:700}}>${v.usd.toFixed(0)}</span></div>))}
+                      </div>
+                    )}
                   </div>
                 </>)}
               </div>
@@ -782,6 +809,18 @@ export default function App(){
             ℹ️ Este giro no tiene datos de piezas totales / entregadas cargados — los indicadores WCM (FPY, PPM, etc.) no están disponibles. Se piden al generar un giro nuevo.
           </div>
         )}
+        {kaizenStatus&&(
+          <div style={{background:'#1E293B',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #334155'}}>
+            <h3 style={{fontSize:12,fontWeight:600,color:'#F59E0B',margin:'0 0 10px',textTransform:'uppercase',letterSpacing:1}}>🔄 Estado Proyectos Kaizen (PDCA)</h3>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:10}}>
+              <MiniKpi l="Plan" v={kaizenStatus.P} c="#38BDF8"/>
+              <MiniKpi l="Do" v={kaizenStatus.D} c="#F59E0B"/>
+              <MiniKpi l="Check" v={kaizenStatus.C} c="#A855F7"/>
+              <MiniKpi l="Act (Completado)" v={kaizenStatus.A} c="#16A34A"/>
+              <MiniKpi l="Sin iniciar" v={kaizenStatus.sinIniciar} c="#475569"/>
+            </div>
+          </div>
+        )}
         <div style={{background:'#1E293B',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #334155'}}><h3 style={{fontSize:12,fontWeight:600,color:'#F59E0B',margin:'0 0 10px',textTransform:'uppercase',letterSpacing:1}}>Pareto</h3><div style={{display:'flex',gap:6,flexWrap:'wrap'}}>{pareto.slice(0,10).map(([c,n],i)=>{const p=(n/totalDefects*100).toFixed(1);return(<div key={i} style={{flex:'1 1 auto',minWidth:100,background:'#0F172A',borderRadius:6,padding:'6px 10px',border:'1px solid #334155'}}><div style={{fontSize:10,color:'#94A3B8'}}>{c}</div><div style={{display:'flex',alignItems:'baseline',gap:4}}><span style={{fontSize:18,fontWeight:700,color:'#F8FAFC',fontFamily:"'IBM Plex Mono'"}}>{n}</span><span style={{fontSize:10,color:'#64748B'}}>{p}%</span></div><div style={{height:2,background:'#334155',borderRadius:1,marginTop:3}}><div style={{height:'100%',width:`${Math.min(+p,100)}%`,background:'#F59E0B',borderRadius:1}}/></div></div>);})}</div></div>
         <div className="no-print" style={{display:'flex',gap:6,alignItems:'center',marginBottom:12,flexWrap:'wrap'}}>
           {['ALL','AA','A','B','C'].map(f=><Btn key={f} onClick={()=>setFilter(f)} bg={filter===f?(f==='ALL'?'#F59E0B':VC[f]):'#334155'} color={filter===f?'#0F172A':'#94A3B8'} style={{padding:'5px 12px',fontSize:12}}>{f==='ALL'?'Todas':f} ({f==='ALL'?totalDefectTypes:summary[f]})</Btn>)}
@@ -845,4 +884,36 @@ function calcWcmKpisFromGiro(g, scrapEventos) {
     ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
     scrapQty, scrapUSD, devolQty, reworkQty, defAntena, defCustomerPPM, defIPPM,
   };
+}
+
+// Pure helper: classifies each voz's PDCA progress into a single current stage (P/D/C/A),
+// based on the highest checkbox marked true. Used by both Matriz QA and Dashboard Gerencial.
+function calcKaizenStatus(qaRows, pdcaMap) {
+  const counts = { P: 0, D: 0, C: 0, A: 0, sinIniciar: 0 };
+  for (const r of (qaRows || [])) {
+    const p = (pdcaMap || {})[r.vozNum];
+    if (!p) { counts.sinIniciar++; continue; }
+    if (p.act) counts.A++;
+    else if (p.check) counts.C++;
+    else if (p.do_step) counts.D++;
+    else if (p.plan) counts.P++;
+    else counts.sinIniciar++;
+  }
+  return counts;
+}
+
+// Pure helper: full scrap indicator set (destino breakdown, top5, modo de falla) for a list of events.
+function computeScrapStats(events) {
+  const list = events || [];
+  const scrapOnly = list.filter(e => e.destino === 'Scrap');
+  const totalScrapUSD = scrapOnly.reduce((s, e) => s + Number(e.monto || 0), 0);
+  const totalScrapQty = scrapOnly.reduce((s, e) => s + e.cantidad, 0);
+  const porDestino = {};
+  for (const e of list) porDestino[e.destino] = (porDestino[e.destino] || 0) + Number(e.monto || 0);
+  const totalAllUSD = Object.values(porDestino).reduce((a, b) => a + b, 0);
+  const byPart = {};
+  for (const e of scrapOnly) { const key = e.defecto_nombre; if (!byPart[key]) byPart[key] = { usd: 0, qty: 0 }; byPart[key].usd += Number(e.monto || 0); byPart[key].qty += e.cantidad; }
+  const top5USD = Object.entries(byPart).sort((a, b) => b[1].usd - a[1].usd).slice(0, 5);
+  const top5Qty = Object.entries(byPart).sort((a, b) => b[1].qty - a[1].qty).slice(0, 5);
+  return { totalScrapUSD, totalScrapQty, porDestino, totalAllUSD, top5USD, top5Qty };
 }
