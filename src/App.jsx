@@ -4,6 +4,7 @@ import { DETECTION_POINTS, TURNOS, ORIGENES, DESTINOS, TIPOS_MATERIAL, DESTINO_C
 import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
+import ScrapKioskApp from './ScrapKiosk';
 import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes } from './supabase';
 
 const VC={AA:'#DC2626',A:'#EA580C',B:'#CA8A04',C:'#16A34A'};
@@ -14,6 +15,7 @@ export default function App(){
   const[session,setSession]=useState(null);
   const[authLoading,setAuthLoading]=useState(true);
   const[kioskMode,setKioskMode]=useState(false);
+  const[scrapKioskMode,setScrapKioskMode]=useState(false);
   const[tiposAsientoAdmin,setTiposAsientoAdmin]=useState([]);
   const[partesAsientoAdmin,setPartesAsientoAdmin]=useState([]);
   const[newParteAsiento,setNewParteAsiento]=useState({tipoAsiento:'',nombre:''});
@@ -331,21 +333,28 @@ export default function App(){
   // ── LOGIN ──
   if(authLoading)return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#94A3B8'}}>Cargando...</div>;
   if(kioskMode)return<KioskApp onExit={()=>setKioskMode(false)}/>;
+  if(scrapKioskMode)return<ScrapKioskApp onExit={()=>setScrapKioskMode(false)}/>;
   if(!session)return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(165deg,#0F172A,#1E293B 50%,#0F172A)',padding:24}}>
       <div style={{textAlign:'center',marginBottom:40}}><div style={{fontSize:14,fontWeight:600,letterSpacing:4,color:'#F59E0B',textTransform:'uppercase',marginBottom:8}}>World Class Manufacturing</div><h1 style={{fontSize:42,fontWeight:700,color:'#F8FAFC',margin:0}}>Matriz QA</h1></div>
-      <div style={{display:'flex',gap:24,alignItems:'stretch',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:820}}>
-        <div style={{flex:'1 1 320px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'2px solid #F59E0B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
-          <div style={{fontSize:48,marginBottom:12}}>📷</div>
-          <h2 style={{fontSize:18,fontWeight:700,color:'#F8FAFC',marginBottom:8}}>Cargar Defectos</h2>
-          <p style={{fontSize:13,color:'#94A3B8',marginBottom:20}}>Acceso directo para operarios de planta — sin usuario ni contraseña</p>
-          <Btn bg="#F59E0B" color="#0F172A" onClick={()=>setKioskMode(true)} style={{padding:'12px 28px',fontSize:15}}>Ingresar al Kiosco</Btn>
+      <div style={{display:'flex',gap:20,alignItems:'stretch',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:1080}}>
+        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'2px solid #F59E0B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+          <div style={{fontSize:44,marginBottom:12}}>📷</div>
+          <h2 style={{fontSize:17,fontWeight:700,color:'#F8FAFC',marginBottom:8}}>Cargar Defectos</h2>
+          <p style={{fontSize:12,color:'#94A3B8',marginBottom:18}}>Acceso directo para operarios de planta — sin usuario ni contraseña</p>
+          <Btn bg="#F59E0B" color="#0F172A" onClick={()=>setKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar al Kiosco</Btn>
         </div>
-        <form onSubmit={handleLogin} style={{flex:'1 1 320px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:32,border:'1px solid #334155'}}>
-          <h2 style={{fontSize:18,fontWeight:600,color:'#F8FAFC',marginBottom:20,textAlign:'center'}}>Gestión QA — Iniciar sesión</h2>
-          <label style={{display:'block',marginBottom:16}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Email</span><input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
-          <label style={{display:'block',marginBottom:24}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Contraseña</span><input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
-          {authError&&<div style={{padding:'10px 14px',background:'#7F1D1D',borderRadius:8,color:'#FCA5A5',fontSize:13,marginBottom:16}}>{authError}</div>}
+        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'2px solid #DC2626',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+          <div style={{fontSize:44,marginBottom:12}}>🗑️</div>
+          <h2 style={{fontSize:17,fontWeight:700,color:'#F8FAFC',marginBottom:8}}>Registrar Scrap</h2>
+          <p style={{fontSize:12,color:'#94A3B8',marginBottom:18}}>Acceso directo para registrar eventos de scrap — sin usuario ni contraseña</p>
+          <Btn bg="#DC2626" color="#fff" onClick={()=>setScrapKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar al Kiosco</Btn>
+        </div>
+        <form onSubmit={handleLogin} style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #334155'}}>
+          <h2 style={{fontSize:17,fontWeight:600,color:'#F8FAFC',marginBottom:18,textAlign:'center'}}>Gestión QA — Iniciar sesión</h2>
+          <label style={{display:'block',marginBottom:14}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Email</span><input type="email" value={loginEmail} onChange={e=>setLoginEmail(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
+          <label style={{display:'block',marginBottom:20}}><span style={{fontSize:12,fontWeight:600,color:'#94A3B8',display:'block',marginBottom:6}}>Contraseña</span><input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} required style={{width:'100%',padding:'10px 14px',borderRadius:8,border:'1px solid #475569',background:'#1E293B',color:'#F8FAFC',fontSize:14}}/></label>
+          {authError&&<div style={{padding:'10px 14px',background:'#7F1D1D',borderRadius:8,color:'#FCA5A5',fontSize:13,marginBottom:14}}>{authError}</div>}
           <button type="submit" style={{width:'100%',padding:12,background:'#F59E0B',color:'#0F172A',border:'none',borderRadius:8,fontWeight:700,fontSize:15,cursor:'pointer'}}>Ingresar</button>
         </form>
       </div>

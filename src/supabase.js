@@ -44,7 +44,13 @@ export function subscribePdca(giroId, cb) {
 
 // Scrap
 export const fetchScrapEventos = async (linea) => { const { data, error } = await supabase.from('scrap_eventos').select('*').eq('linea', linea).order('fecha', { ascending: false }); if (error) throw error; return data; };
-export const saveScrapEvento = async (ev, linea) => { const { data, error } = await supabase.from('scrap_eventos').insert({ linea, giro_id: ev.giroId || null, voz_num: ev.vozNum || null, defecto_nombre: ev.defectoNombre, componente: ev.componente, fecha: ev.fecha, turno: ev.turno, origen: ev.origen, destino: ev.destino, tipo_material: ev.tipoMaterial, cantidad: ev.cantidad, costo_unitario: ev.costoUnitario, notas: ev.notas }).select().single(); if (error) throw error; return data; };
+export const saveScrapEvento = async (ev, linea) => {
+  const { error } = await supabase.from('scrap_eventos').insert({ linea, giro_id: ev.giroId || null, voz_num: ev.vozNum || null, defecto_nombre: ev.defectoNombre, componente: ev.componente, modelo: ev.modelo || null, cuadrante: ev.cuadrante || null, fecha: ev.fecha, turno: ev.turno, origen: ev.origen, destino: ev.destino, tipo_material: ev.tipoMaterial, cantidad: ev.cantidad, costo_unitario: ev.costoUnitario, notas: ev.notas });
+  // No .select() here: this can run unauthenticated (kiosco de scrap), and the SELECT
+  // policy requires authenticated — requesting the row back would falsely fail RLS.
+  if (error) throw error;
+  return true;
+};
 export const deleteScrapEvento = async (id) => { const { error } = await supabase.from('scrap_eventos').delete().eq('id', id); if (error) throw error; };
 export function subscribeScrap(linea, cb) {
   const ch = supabase.channel(`scrap-${linea}`).on('postgres_changes', { event: '*', schema: 'public', table: 'scrap_eventos', filter: `linea=eq.${linea}` }, cb).subscribe();
