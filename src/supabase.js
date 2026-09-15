@@ -119,3 +119,28 @@ export const upsertProduccionDiaria = async (linea, fecha, d) => {
     .select().single();
   if (error) throw error; return data;
 };
+
+// ── Material No Conforme (event log: Generado → Clasificado → Resuelto) ──
+// Ambos kioscos (Producción / Sala) trabajan sin login: insertan y leen, nunca editan ni borran.
+export const saveMncEvento = async (ev) => {
+  const { error } = await supabase.from('material_no_conforme_eventos').insert({
+    lote_id: ev.loteId, linea: ev.linea, tipo_evento: ev.tipoEvento, resultado: ev.resultado || null,
+    componente: ev.componente || null, defecto: ev.defecto || null, defecto_nombre: ev.defectoNombre || null,
+    tipo_asiento: ev.tipoAsiento || null, parte_asiento: ev.parteAsiento || null, cuadrante: ev.cuadrante || null, modelo: ev.modelo || null,
+    cantidad: ev.cantidad || null, origen: ev.origen || null, turno: ev.turno || null, tipo_material: ev.tipoMaterial || null,
+    costo_unitario: ev.costoUnitario ?? null, fecha: ev.fecha, notas: ev.notas || null,
+  });
+  if (error) throw error;
+  return true;
+};
+export const fetchMncEventos = async (linea, desde, hasta) => {
+  let q = supabase.from('material_no_conforme_eventos').select('*').eq('linea', linea);
+  if (desde) q = q.gte('fecha', desde);
+  if (hasta) q = q.lte('fecha', hasta);
+  const { data, error } = await q.order('created_at', { ascending: true });
+  if (error) throw error; return data;
+};
+export function subscribeMnc(linea, cb) {
+  const ch = supabase.channel(`mnc-${linea}`).on('postgres_changes', { event: '*', schema: 'public', table: 'material_no_conforme_eventos', filter: `linea=eq.${linea}` }, cb).subscribe();
+  return () => supabase.removeChannel(ch);
+}

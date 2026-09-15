@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx';
 import readXlsxFile from 'read-excel-file';
 import KioskApp from './Kiosk';
 import ScrapKioskApp from './ScrapKiosk';
+import NoConformeKioskApp from './NoConformeKiosk';
+import SalaKioskApp from './SalaKiosk';
 import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, fetchProduccionDiaria, upsertProduccionDiaria } from './supabase';
 
 const VC={AA:'#DC2626',A:'#991B1B',B:'#71717A',C:'#D4D4D8'};
@@ -16,6 +18,8 @@ export default function App(){
   const[authLoading,setAuthLoading]=useState(true);
   const[kioskMode,setKioskMode]=useState(false);
   const[scrapKioskMode,setScrapKioskMode]=useState(false);
+  const[noConformeKioskMode,setNoConformeKioskMode]=useState(false);
+  const[salaKioskMode,setSalaKioskMode]=useState(false);
   const[tiposAsientoAdmin,setTiposAsientoAdmin]=useState([]);
   const[partesAsientoAdmin,setPartesAsientoAdmin]=useState([]);
   const[newParteAsiento,setNewParteAsiento]=useState({tipoAsiento:'',nombre:''});
@@ -402,21 +406,26 @@ export default function App(){
   if(authLoading)return<div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',color:'#A1A1AA'}}>Cargando...</div>;
   if(kioskMode)return<KioskApp onExit={()=>setKioskMode(false)}/>;
   if(scrapKioskMode)return<ScrapKioskApp onExit={()=>setScrapKioskMode(false)}/>;
+  if(noConformeKioskMode)return<NoConformeKioskApp onExit={()=>setNoConformeKioskMode(false)}/>;
+  if(salaKioskMode)return<SalaKioskApp onExit={()=>setSalaKioskMode(false)}/>;
   if(!session)return(
     <div style={{minHeight:'100vh',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',background:'linear-gradient(165deg,#121212,#1F1F23 50%,#121212)',padding:24}}>
-      <div style={{textAlign:'center',marginBottom:40}}><div style={{fontSize:14,fontWeight:600,letterSpacing:4,color:'#B91C1C',textTransform:'uppercase',marginBottom:8}}>World Class Manufacturing</div><h1 style={{fontSize:36,fontWeight:700,color:'#FAFAFA',margin:0}}>Data Collector - Quality</h1></div>
-      <div style={{display:'flex',gap:20,alignItems:'stretch',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:1080}}>
-        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #52525B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
-          <div style={{fontSize:44,marginBottom:12}}>📷</div>
-          <h2 style={{fontSize:17,fontWeight:700,color:'#FAFAFA',marginBottom:8}}>Cargar Defectos</h2>
-          <p style={{fontSize:12,color:'#A1A1AA',marginBottom:18}}>Acceso directo para operarios de planta — sin usuario ni contraseña</p>
-          <Btn bg="#27272A" color="#FAFAFA" onClick={()=>setKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar a módulo de carga</Btn>
-        </div>
-        <div style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #52525B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
-          <div style={{fontSize:44,marginBottom:12}}>🗑️</div>
-          <h2 style={{fontSize:17,fontWeight:700,color:'#FAFAFA',marginBottom:8}}>Registrar Scrap</h2>
-          <p style={{fontSize:12,color:'#A1A1AA',marginBottom:18}}>Acceso directo para registrar eventos de scrap — sin usuario ni contraseña</p>
-          <Btn bg="#27272A" color="#FAFAFA" onClick={()=>setScrapKioskMode(true)} style={{padding:'11px 24px',fontSize:14}}>Ingresar a módulo de carga</Btn>
+      <div style={{textAlign:'center',marginBottom:32}}><div style={{fontSize:14,fontWeight:600,letterSpacing:4,color:'#B91C1C',textTransform:'uppercase',marginBottom:8}}>World Class Manufacturing</div><h1 style={{fontSize:36,fontWeight:700,color:'#FAFAFA',margin:0}}>Data Collector - Quality</h1></div>
+      <div style={{display:'flex',gap:20,alignItems:'flex-start',flexWrap:'wrap',justifyContent:'center',width:'100%',maxWidth:1200}}>
+        <div style={{flex:'2 1 560px',display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(250px,1fr))',gap:16}}>
+          {[
+            {icon:'📷',title:'Cargar Defectos',desc:'Operarios de planta',onClick:()=>setKioskMode(true)},
+            {icon:'🗑️',title:'Registrar Scrap',desc:'Evento directo de scrap',onClick:()=>setScrapKioskMode(true)},
+            {icon:'📦',title:'Registrar No Conforme',desc:'Producción — material generado',onClick:()=>setNoConformeKioskMode(true)},
+            {icon:'🔍',title:'Sala de No Conforme',desc:'Clasificar: OK / Scrap / En Análisis',onClick:()=>setSalaKioskMode(true)},
+          ].map((k,i)=>(
+            <div key={i} style={{background:'rgba(30,41,59,0.8)',borderRadius:16,padding:22,border:'1px solid #52525B',display:'flex',flexDirection:'column',justifyContent:'center',alignItems:'center',textAlign:'center'}}>
+              <div style={{fontSize:34,marginBottom:8}}>{k.icon}</div>
+              <h2 style={{fontSize:15,fontWeight:700,color:'#FAFAFA',marginBottom:4}}>{k.title}</h2>
+              <p style={{fontSize:11,color:'#A1A1AA',marginBottom:14}}>{k.desc} — sin usuario ni contraseña</p>
+              <Btn bg="#27272A" color="#FAFAFA" onClick={k.onClick} style={{padding:'9px 18px',fontSize:12}}>Ingresar a módulo de carga</Btn>
+            </div>
+          ))}
         </div>
         <form onSubmit={handleLogin} style={{flex:'1 1 280px',background:'rgba(30,41,59,0.8)',borderRadius:16,padding:28,border:'1px solid #3F3F46'}}>
           <h2 style={{fontSize:17,fontWeight:600,color:'#FAFAFA',marginBottom:18,textAlign:'center'}}>Gestión QA — Iniciar sesión</h2>
