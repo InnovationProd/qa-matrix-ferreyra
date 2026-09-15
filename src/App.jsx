@@ -7,7 +7,8 @@ import KioskApp from './Kiosk';
 import ScrapKioskApp from './ScrapKiosk';
 import NoConformeKioskApp from './NoConformeKiosk';
 import SalaKioskApp from './SalaKiosk';
-import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, fetchProduccionDiaria, upsertProduccionDiaria } from './supabase';
+import { fetchDefectos, upsertDefecto, deleteDefecto, bulkUpsertDefectos, saveGiro, fetchGiros, fetchGiro, deleteGiro, updateGiroRows, savePdca, fetchPdcas, saveUnificacion, fetchLineas, signIn, signOut, getSession, onAuthChange, subscribeGiros, subscribePdca, fetchScrapEventos, saveScrapEvento, deleteScrapEvento, subscribeScrap, fetchTiposAsiento, saveTipoAsiento, deleteTipoAsiento, fetchPartesAsiento, savePartesAsiento, deletePartesAsiento, fetchModelos, saveModelo, deleteModelo, fetchCuadrantes, saveCuadrante, deleteCuadrante, fetchReportesDefectos, countReportesPendientes, fetchProduccionDiaria, upsertProduccionDiaria, fetchMncEventos, subscribeMnc } from './supabase';
+import { computeLotes, formatDuration } from './mncUtils';
 
 const VC={AA:'#DC2626',A:'#991B1B',B:'#71717A',C:'#D4D4D8'};
 const Voz=({v})=><span className="voz-badge" data-voz={v} style={{background:VC[v],color:'#FAFAFA',padding:'2px 8px',borderRadius:4,fontWeight:700,fontSize:12,letterSpacing:1}}>{v}</span>;
@@ -46,6 +47,9 @@ export default function App(){
     KP1:{fecha:todayLocal(),piezasTotales:'',piezasEntregadas:'',bancosControlados:''},
   });
   const[gerLoading,setGerLoading]=useState(false);
+  const[mncEventos,setMncEventos]=useState([]);
+  const[mncDesde,setMncDesde]=useState('');
+  const[mncHasta,setMncHasta]=useState('');
   const[authError,setAuthError]=useState('');
   const[loginEmail,setLoginEmail]=useState('');
   const[loginPass,setLoginPass]=useState('');
@@ -166,6 +170,18 @@ export default function App(){
   },[defectos,occurrenceMap,linea]);
 
   const loadHistory=useCallback(async()=>{try{const g=await fetchGiros(linea);setGiros(g);}catch(e){console.error(e);}setPage('history');},[linea]);
+
+  const loadMnc=useCallback(async()=>{
+    if(!linea)return;
+    try{const ev=await fetchMncEventos(linea);setMncEventos(ev);}catch(e){console.error(e);}
+    setPage('noconforme');
+  },[linea]);
+
+  useEffect(()=>{
+    if(!session||!linea||page!=='noconforme')return;
+    const unsub=subscribeMnc(linea,()=>{fetchMncEventos(linea).then(setMncEventos).catch(console.error);});
+    return unsub;
+  },[session,linea,page]);
 
   const loadGerencial=useCallback(async()=>{
     setGerLoading(true);
@@ -452,6 +468,7 @@ export default function App(){
         <HC icon="🗑️" title="Scrap" desc="Dashboard de seguimiento de scrap" onClick={()=>{setScrapForm(null);setPage('scrap');}}/>
         <HC icon="🧩" title="Catálogos" desc="Tipos de asiento, modelos, cuadrantes" onClick={()=>{loadCatalogosAdmin();setPage('catalogos');}}/>
         <HC icon="📈" title="Dashboard Gerencial" desc="X6S vs KP1 — vista unificada" onClick={loadGerencial}/>
+        <HC icon="📦" title="Material No Conforme" desc="Cola de trabajo y resolución" onClick={loadMnc}/>
       </div>}
     </div>
   );
@@ -670,6 +687,100 @@ export default function App(){
           </div>
           );
         })()}
+      </div>
+    );
+  }
+
+  // ── MATERIAL NO CONFORME ──
+  if(page==='noconforme'){
+    const lotes=computeLotes(mncEventos);
+    const pendientes=lotes.filter(l=>l.estado==='Pendiente');
+    const enAnalisis=lotes.filter(l=>l.estado==='En Análisis').sort((a,b)=>(b.msEnAnalisis||0)-(a.msEnAnalisis||0));
+    const resueltos=lotes.filter(l=>l.estado==='Resuelto').sort((a,b)=>new Date(b.lastEvent.created_at)-new Date(a.lastEvent.created_at));
+    const resueltosRecientes=resueltos.slice(0,10);
+
+    const resueltosFiltrados=resueltos.filter(l=>{
+      const f=l.lastEvent.fecha;
+      if(mncDesde&&f<mncDesde)return false;
+      if(mncHasta&&f>mncHasta)return false;
+      return true;
+    });
+    const pasaronPorAnalisis=resueltosFiltrados.filter(l=>l.clasificado&&l.clasificado.resultado==='En Análisis');
+    const recuperados=pasaronPorAnalisis.filter(l=>l.resultado==='OK').length;
+    const noRecuperados=pasaronPorAnalisis.filter(l=>l.resultado==='Scrap').length;
+    const tasaRecuperacion=pasaronPorAnalisis.length>0?(recuperados/pasaronPorAnalisis.length*100):null;
+    const tiemposAnalisisResueltos=pasaronPorAnalisis.map(l=>l.msEnAnalisis).filter(x=>x!=null);
+    const tiempoPromedioAnalisis=tiemposAnalisisResueltos.length>0?tiemposAnalisisResueltos.reduce((a,b)=>a+b,0)/tiemposAnalisisResueltos.length:null;
+    const scrapUSD=resueltosFiltrados.filter(l=>l.resultado==='Scrap').reduce((s,l)=>s+l.monto,0);
+    const scrapQty=resueltosFiltrados.filter(l=>l.resultado==='Scrap').reduce((s,l)=>s+(l.base.cantidad||0),0);
+    const okQty=resueltosFiltrados.filter(l=>l.resultado==='OK').reduce((s,l)=>s+(l.base.cantidad||0),0);
+    const porDefecto={};
+    for(const l of resueltosFiltrados){if(l.resultado==='Scrap'){const k=l.base.defecto_nombre;porDefecto[k]=(porDefecto[k]||0)+(l.base.cantidad||0);}}
+    const topDefectos=Object.entries(porDefecto).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+    const LoteCard=({l,showTiempo})=>(
+      <div style={{background:'#0F172A',borderRadius:8,padding:'10px 12px',border:'1px solid #3F3F46',marginBottom:8}}>
+        <div style={{fontWeight:700,fontSize:12,color:'#FAFAFA'}}>{l.base.defecto_nombre}</div>
+        <div style={{fontSize:10,color:'#A1A1AA',marginTop:3}}>{l.base.modelo&&`${l.base.modelo} · `}{l.base.cuadrante&&`${l.base.cuadrante} · `}Cant: {l.base.cantidad} · {l.base.fecha}</div>
+        {showTiempo&&<div style={{fontSize:10,color:'#B91C1C',marginTop:3,fontWeight:600}}>⏱ {formatDuration(l.msEnAnalisis)} esperando</div>}
+        {l.estado==='Resuelto'&&<span style={{display:'inline-block',marginTop:4,padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,background:l.resultado==='OK'?'#3F3F46':'#450A0A',color:l.resultado==='OK'?'#FAFAFA':'#FCA5A5'}}>{l.resultado}</span>}
+      </div>
+    );
+
+    return(
+      <div style={{minHeight:'100vh',padding:24,maxWidth:1400,margin:'0 auto'}}>
+        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}><Btn onClick={()=>setPage('home')}>← Inicio</Btn><h2 style={{fontSize:22,fontWeight:700,color:'#FAFAFA',margin:0}}>Material No Conforme — {linea}</h2></div>
+
+        {/* COLA DE TRABAJO */}
+        <h3 style={{fontSize:13,fontWeight:600,color:'#B91C1C',marginBottom:12,textTransform:'uppercase',letterSpacing:1}}>Cola de trabajo (en vivo)</h3>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))',gap:16,marginBottom:32}}>
+          <div style={{background:'#1F1F23',borderRadius:12,padding:16,border:'1px solid #3F3F46'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:12,fontWeight:700,color:'#71717A',textTransform:'uppercase'}}>Pendiente</span><span style={{fontSize:16,fontWeight:700,color:'#FAFAFA'}}>{pendientes.length}</span></div>
+            {pendientes.length===0?<p style={{fontSize:11,color:'#71717A'}}>Nada pendiente</p>:pendientes.map(l=><LoteCard key={l.loteId} l={l}/>)}
+          </div>
+          <div style={{background:'#1F1F23',borderRadius:12,padding:16,border:'1px solid #B91C1C'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:12,fontWeight:700,color:'#B91C1C',textTransform:'uppercase'}}>En Análisis</span><span style={{fontSize:16,fontWeight:700,color:'#FAFAFA'}}>{enAnalisis.length}</span></div>
+            {enAnalisis.length===0?<p style={{fontSize:11,color:'#71717A'}}>Nada en análisis</p>:enAnalisis.map(l=><LoteCard key={l.loteId} l={l} showTiempo/>)}
+          </div>
+          <div style={{background:'#1F1F23',borderRadius:12,padding:16,border:'1px solid #3F3F46'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}><span style={{fontSize:12,fontWeight:700,color:'#71717A',textTransform:'uppercase'}}>Resueltos recientes</span><span style={{fontSize:16,fontWeight:700,color:'#FAFAFA'}}>{resueltos.length}</span></div>
+            {resueltosRecientes.length===0?<p style={{fontSize:11,color:'#71717A'}}>Nada resuelto todavía</p>:resueltosRecientes.map(l=><LoteCard key={l.loteId} l={l}/>)}
+          </div>
+        </div>
+
+        {/* INDICADORES DEL PERIODO */}
+        <div style={{display:'flex',gap:10,alignItems:'end',marginBottom:16,flexWrap:'wrap'}}>
+          <h3 style={{fontSize:13,fontWeight:600,color:'#B91C1C',margin:0,textTransform:'uppercase',letterSpacing:1,flex:1}}>Indicadores del período</h3>
+          <div><label style={{fontSize:10,color:'#A1A1AA',display:'block',marginBottom:4}}>Desde</label><input type="date" value={mncDesde} onChange={e=>setMncDesde(e.target.value)} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #52525B',background:'#1F1F23',color:'#FAFAFA',fontSize:12}}/></div>
+          <div><label style={{fontSize:10,color:'#A1A1AA',display:'block',marginBottom:4}}>Hasta</label><input type="date" value={mncHasta} onChange={e=>setMncHasta(e.target.value)} style={{padding:'6px 10px',borderRadius:6,border:'1px solid #52525B',background:'#1F1F23',color:'#FAFAFA',fontSize:12}}/></div>
+          {(mncDesde||mncHasta)&&<Btn onClick={()=>{setMncDesde('');setMncHasta('');}} style={{fontSize:11}}>Limpiar</Btn>}
+        </div>
+
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:24}}>
+          <MiniKpi l="Resueltos" v={resueltosFiltrados.length}/>
+          <MiniKpi l="Piezas OK" v={okQty} c="#FAFAFA"/>
+          <MiniKpi l="Piezas Scrap" v={scrapQty} c="#B91C1C"/>
+          <MiniKpi l="Scrap USD" v={`$${scrapUSD.toLocaleString(undefined,{maximumFractionDigits:0})}`} c="#B91C1C"/>
+          <MiniKpi l="% Recuperado" v={tasaRecuperacion!=null?`${tasaRecuperacion.toFixed(0)}%`:'—'} c="#FAFAFA"/>
+          <MiniKpi l="Tiempo prom. análisis" v={formatDuration(tiempoPromedioAnalisis)} c="#71717A"/>
+        </div>
+
+        {pasaronPorAnalisis.length>0&&(
+          <div style={{background:'#1F1F23',borderRadius:12,padding:16,border:'1px solid #3F3F46',marginBottom:24}}>
+            <div style={{fontSize:11,color:'#A1A1AA',marginBottom:8,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Resolución de lo que pasó por "En Análisis" ({pasaronPorAnalisis.length} casos)</div>
+            <div style={{display:'flex',gap:16}}>
+              <span style={{fontSize:12,color:'#FAFAFA'}}>✓ Recuperado (OK): <b>{recuperados}</b></span>
+              <span style={{fontSize:12,color:'#B91C1C'}}>✕ No recuperado (Scrap): <b>{noRecuperados}</b></span>
+            </div>
+          </div>
+        )}
+
+        {topDefectos.length>0&&(
+          <div style={{background:'#1F1F23',borderRadius:12,padding:16,border:'1px solid #3F3F46'}}>
+            <div style={{fontSize:11,color:'#B91C1C',marginBottom:10,fontWeight:600,textTransform:'uppercase',letterSpacing:0.5}}>Top defectos que más generan Scrap (cantidad)</div>
+            {topDefectos.map(([name,qty],i)=>{const max=topDefectos[0][1];return(<div key={i} style={{marginBottom:6}}><div style={{fontSize:11,color:'#E4E4E7',marginBottom:2}}>{name}</div><div style={{display:'flex',alignItems:'center',gap:6}}><div style={{flex:1,height:10,background:'#3F3F46',borderRadius:2}}><div style={{height:'100%',width:`${qty/max*100}%`,background:'#B91C1C',borderRadius:2}}/></div><span style={{fontSize:10,fontWeight:700,color:'#FAFAFA',minWidth:24,textAlign:'right'}}>{qty}</span></div></div>);})}
+          </div>
+        )}
       </div>
     );
   }
