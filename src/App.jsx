@@ -359,8 +359,11 @@ export default function App(){
     const scrapUSD=linkedScrap.filter(e=>e.destino==='Scrap').reduce((s,e)=>s+Number(e.monto||0),0);
     const reworkQty=Math.max(0,defTotal-scrapQty-devolQty);
 
-    const fpy=pt>0?((pt-defTotal)/pt*100):null;
-    const rework=pt>0?(reworkQty/pt*100):null;
+    // FPY/Rework con fórmula de Poisson (RTY): correcta cuando una pieza puede tener >1 defecto.
+    // DPU = defectos por unidad; FPY = e^(-DPU); Rework = 1 - FPY. Nunca negativo, nunca >100%.
+    const dpu=pt>0?(defTotal/pt):null;
+    const fpy=dpu!=null?(Math.exp(-dpu)*100):null;
+    const rework=fpy!=null?(100-fpy):null;
     const scrapRate=pe>0?(scrapQty/pe*100):null;
     const dppm=pe>0?(defAntena/pe*1000000):null;
     const custPpm=pe>0?(defCustomerPPM/pe*1000000):null;
@@ -1087,9 +1090,11 @@ function calcWcmKpisFromGiro(g, scrapEventos) {
   const devolQty = linkedScrap.filter(e => e.destino === 'Devolución Proveedor').reduce((s, e) => s + e.cantidad, 0);
   const scrapUSD = linkedScrap.filter(e => e.destino === 'Scrap').reduce((s, e) => s + Number(e.monto || 0), 0);
   const reworkQty = Math.max(0, defTotal - scrapQty - devolQty);
+  const dpu = pt > 0 ? (defTotal / pt) : null;
+  const fpyVal = dpu != null ? (Math.exp(-dpu) * 100) : null;
   return {
-    fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
-    rework: pt > 0 ? (reworkQty / pt * 100) : null,
+    fpy: fpyVal,
+    rework: fpyVal != null ? (100 - fpyVal) : null,
     scrapRate: pe > 0 ? (scrapQty / pe * 100) : null,
     dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
     custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
@@ -1117,9 +1122,11 @@ function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
   const devolQty = devolOnly.reduce((s, e) => s + e.cantidad, 0);
   const scrapUSD = scrapOnly.reduce((s, e) => s + Number(e.monto || 0), 0);
   const reworkQty = Math.max(0, defTotal - scrapQty - devolQty);
+  const dpu = pt > 0 ? (defTotal / pt) : null;
+  const fpyVal = dpu != null ? (Math.exp(-dpu) * 100) : null;
   return {
-    fpy: pt > 0 ? ((pt - defTotal) / pt * 100) : null,
-    rework: pt > 0 ? (reworkQty / pt * 100) : null,
+    fpy: fpyVal,
+    rework: fpyVal != null ? (100 - fpyVal) : null,
     scrapRate: pe > 0 ? (scrapQty / pe * 100) : null,
     dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
     custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
