@@ -1,8 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { fetchLineas, fetchDefectos, fetchTiposAsiento, fetchPartesAsiento, fetchModelos, fetchCuadrantes, saveReporteDefecto } from './supabase';
 import { DETECTION_POINTS, todayLocal } from './config';
-import { parseLearQr } from './qrParse';
-import { startQrScanner } from './qrScanner';
 
 const Btn = ({ children, onClick, bg = '#3F3F46', color = '#FAFAFA', style, ...p }) => (
   <button onClick={onClick} style={{ padding: '10px 20px', background: bg, color, border: 'none', borderRadius: 8, fontWeight: 700, fontSize: 14, ...style }} {...p}>{children}</button>
@@ -30,14 +28,9 @@ export default function KioskApp({ onExit }) {
   const [modelos, setModelos] = useState([]);
   const [cuadrantes, setCuadrantes] = useState([]);
   const [defectos, setDefectos] = useState([]);
-  const [scanning, setScanning] = useState(false);
-  const [scanError, setScanError] = useState('');
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const [sessionCount, setSessionCount] = useState(0);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const stopScanRef = useRef(null);
 
   useEffect(() => { fetchLineas().then(setLineas).catch(console.error); }, []);
 
@@ -60,26 +53,6 @@ export default function KioskApp({ onExit }) {
     setData({ secuencia: '', bsn: '', qrRaw: '', deteccion: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', componente: '', defectoParte: '' });
     setStep(1);
   }, []);
-
-  const startScan = useCallback(async () => {
-    setScanning(true); setScanError('');
-    setTimeout(async () => {
-      if (!videoRef.current || !canvasRef.current) return;
-      const stop = await startQrScanner(videoRef.current, canvasRef.current, (text) => {
-        const parsed = parseLearQr(text);
-        if (parsed) {
-          setData(p => ({ ...p, secuencia: parsed.secuencia || p.secuencia, bsn: parsed.bsn || p.bsn, qrRaw: parsed.raw }));
-          setScanning(false);
-        } else {
-          setData(p => ({ ...p, qrRaw: text }));
-          setScanning(false);
-        }
-      }, (err) => { setScanError(err); setScanning(false); });
-      stopScanRef.current = stop;
-    }, 50);
-  }, []);
-
-  const cancelScan = useCallback(() => { if (stopScanRef.current) stopScanRef.current(); setScanning(false); }, []);
 
   const handleSave = useCallback(async () => {
     if (!data.deteccion || !data.componente || !data.defectoParte) return;
@@ -122,36 +95,23 @@ export default function KioskApp({ onExit }) {
     </div>
   );
 
-  // Step 1: escaneo QR (opcional)
+  // Step 1: secuencia/BSN de la etiqueta (manual — se leen impresos en la etiqueta física, opcional)
   if (step === 1) return (
     <div style={wrap}>
       {header(`Línea ${linea}`, () => setStep(0))}
       {lastSaved && <div style={{ background: '#27272A', color: '#E4E4E7', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✓ Guardado: {lastSaved}</div>}
-      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Escaneá el código QR de la etiqueta LEAR (o saltá este paso si no está disponible):</p>
-
-      {!scanning ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
-          <Btn bg="#27272A" color="#FAFAFA" onClick={startScan} style={{ padding: '18px', fontSize: 16 }}>📷 Escanear código QR</Btn>
-          {(data.secuencia || data.bsn) && (
-            <div style={{ background: '#1F1F23', borderRadius: 10, padding: 14, border: '1px solid #D4D4D8' }}>
-              <div style={{ fontSize: 11, color: '#D4D4D8', fontWeight: 700, marginBottom: 6 }}>✓ Datos leídos del QR</div>
-              {data.secuencia && <div style={{ fontSize: 13, color: '#FAFAFA' }}>Secuencia: <b>{data.secuencia}</b></div>}
-              {data.bsn && <div style={{ fontSize: 13, color: '#FAFAFA' }}>BSN: <b>{data.bsn}</b></div>}
-            </div>
-          )}
-          <Btn onClick={() => setStep(2)} style={{ padding: '14px' }}>{(data.secuencia || data.bsn) ? 'Continuar →' : 'Saltar este paso →'}</Btn>
-          {scanError && <div style={{ color: '#FCA5A5', fontSize: 12 }}>{scanError}</div>}
-        </div>
-      ) : (
-        <div style={{ maxWidth: 500 }}>
-          <div style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', border: '3px solid #B91C1C' }}>
-            <video ref={videoRef} style={{ width: '100%', display: 'block' }} muted playsInline />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-          </div>
-          <p style={{ color: '#A1A1AA', fontSize: 12, marginTop: 10, textAlign: 'center' }}>Apuntá la cámara al código QR de la etiqueta</p>
-          <Btn onClick={cancelScan} bg="#450A0A" color="#FCA5A5" style={{ width: '100%', marginTop: 10 }}>Cancelar</Btn>
-        </div>
-      )}
+      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Secuencia y BSN de la etiqueta (opcional — los ves impresos al lado del código):</p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 400 }}>
+        <label>
+          <span style={{ fontSize: 11, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Secuencia</span>
+          <input type="text" inputMode="numeric" value={data.secuencia} onChange={e => setData(p => ({ ...p, secuencia: e.target.value }))} placeholder="Ej: 2193" style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #3F3F46', background: '#1F1F23', color: '#FAFAFA', fontSize: 16, fontWeight: 700 }} />
+        </label>
+        <label>
+          <span style={{ fontSize: 11, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>BSN</span>
+          <input type="text" inputMode="numeric" value={data.bsn} onChange={e => setData(p => ({ ...p, bsn: e.target.value }))} placeholder="Ej: 002483235" style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #3F3F46', background: '#1F1F23', color: '#FAFAFA', fontSize: 16, fontWeight: 700 }} />
+        </label>
+        <Btn bg="#27272A" onClick={() => setStep(2)} style={{ padding: '14px' }}>{(data.secuencia || data.bsn) ? 'Continuar →' : 'Saltar este paso →'}</Btn>
+      </div>
     </div>
   );
 

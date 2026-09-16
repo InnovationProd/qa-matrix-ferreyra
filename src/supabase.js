@@ -96,10 +96,7 @@ export const fetchReportesDefectos = async (linea, desde, hasta) => {
   const { data, error } = await q.order('fecha', { ascending: false });
   if (error) throw error; return data;
 };
-export const countReportesPendientes = async (linea) => {
-  const { count, error } = await supabase.from('reportes_defectos').select('id', { count: 'exact', head: true }).eq('linea', linea).is('giro_id', null);
-  if (error) throw error; return count || 0;
-};
+
 export const markReportesAsGiro = async (ids, giroId) => {
   const { error } = await supabase.from('reportes_defectos').update({ giro_id: giroId }).in('id', ids);
   if (error) throw error;
