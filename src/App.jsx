@@ -720,8 +720,9 @@ export default function App(){
 
     const LoteCard=({l,showTiempo})=>(
       <div style={{background:'#0F172A',borderRadius:8,padding:'10px 12px',border:'1px solid #3F3F46',marginBottom:8}}>
-        <div style={{fontWeight:700,fontSize:12,color:'#FAFAFA'}}>{l.base.defecto_nombre}</div>
-        <div style={{fontSize:10,color:'#A1A1AA',marginTop:3}}>{l.base.modelo&&`${l.base.modelo} · `}{l.base.cuadrante&&`${l.base.cuadrante} · `}Cant: {l.base.cantidad} · {l.base.fecha}</div>
+        <div style={{fontSize:10,fontWeight:700,color:'#B91C1C',fontFamily:"'IBM Plex Mono',monospace"}}>MNC-{linea}-{l.base.ticket_num}</div>
+        <div style={{fontWeight:700,fontSize:12,color:'#FAFAFA',marginTop:2}}>{l.base.defecto_nombre}</div>
+        <div style={{fontSize:10,color:'#A1A1AA',marginTop:3}}>{l.base.modelo&&`${l.base.modelo} · `}{l.base.cuadrante&&`${l.base.cuadrante} · `}{l.base.fecha}</div>
         {showTiempo&&<div style={{fontSize:10,color:'#B91C1C',marginTop:3,fontWeight:600}}>⏱ {formatDuration(l.msEnAnalisis)} esperando</div>}
         {l.estado==='Resuelto'&&<span style={{display:'inline-block',marginTop:4,padding:'2px 8px',borderRadius:4,fontSize:10,fontWeight:700,background:l.resultado==='OK'?'#3F3F46':'#450A0A',color:l.resultado==='OK'?'#FAFAFA':'#FCA5A5'}}>{l.resultado}</span>}
       </div>

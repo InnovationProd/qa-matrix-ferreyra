@@ -113,9 +113,10 @@ export default function SalaKioskApp({ onExit }) {
             background: '#1F1F23', color: '#FAFAFA', textAlign: 'left', cursor: 'pointer',
           }}>
             <div>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{lote.base.defecto_nombre}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#B91C1C', fontFamily: "'IBM Plex Mono',monospace" }}>MNC-{linea}-{lote.base.ticket_num}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, marginTop: 2 }}>{lote.base.defecto_nombre}</div>
               <div style={{ fontSize: 11, color: '#A1A1AA', marginTop: 3 }}>
-                {lote.base.modelo && `${lote.base.modelo} · `}{lote.base.cuadrante && `${lote.base.cuadrante} · `}Cant: {lote.base.cantidad} · {lote.base.fecha}
+                {lote.base.modelo && `${lote.base.modelo} · `}{lote.base.cuadrante && `${lote.base.cuadrante} · `}{lote.base.fecha}
               </div>
             </div>
             <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, background: ESTADO_COLOR[lote.estado], color: '#FAFAFA', whiteSpace: 'nowrap' }}>{lote.estado}</span>
@@ -132,8 +133,9 @@ export default function SalaKioskApp({ onExit }) {
       <div style={wrap}>
         {header('Clasificar', () => { setStep(1); setSelectedLote(null); })}
         <div style={{ background: '#1F1F23', borderRadius: 12, padding: 16, border: '1px solid #3F3F46', marginBottom: 20 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#B91C1C', fontFamily: "'IBM Plex Mono',monospace", marginBottom: 6 }}>MNC-{linea}-{selectedLote.base.ticket_num}</div>
           <div style={{ fontWeight: 700, fontSize: 16, color: '#FAFAFA', marginBottom: 4 }}>{selectedLote.base.defecto_nombre}</div>
-          <div style={{ fontSize: 12, color: '#A1A1AA' }}>{selectedLote.base.modelo && `${selectedLote.base.modelo} · `}{selectedLote.base.cuadrante && `${selectedLote.base.cuadrante} · `}Cantidad: {selectedLote.base.cantidad} · Generado: {selectedLote.base.fecha}</div>
+          <div style={{ fontSize: 12, color: '#A1A1AA' }}>{selectedLote.base.modelo && `${selectedLote.base.modelo} · `}{selectedLote.base.cuadrante && `${selectedLote.base.cuadrante} · `}Generado: {selectedLote.base.fecha}</div>
           {!esPendiente && <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 6 }}>Estaba "En Análisis" — ahora resolvé el destino final.</div>}
         </div>
 

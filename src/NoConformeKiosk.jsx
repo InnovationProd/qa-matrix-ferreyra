@@ -17,15 +17,15 @@ const BigBtn = ({ label, sub, selected, onClick }) => (
 export default function NoConformeKioskApp({ onExit }) {
   const [lineas, setLineas] = useState([]);
   const [linea, setLinea] = useState(null);
-  const [step, setStep] = useState(0);
-  const [data, setData] = useState({ componente: '', defectoParte: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', cantidad: '1', turno: 'A', origen: 'Producción' });
+  const [step, setStep] = useState(0); // 0=linea,1=componente/defecto,2=ubicacion,3=modelo,4=turno/origen,5=confirmar,6=ticket
+  const [data, setData] = useState({ componente: '', defectoParte: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', turno: 'A', origen: 'Producción' });
   const [tiposAsiento, setTiposAsiento] = useState([]);
   const [partesAsiento, setPartesAsiento] = useState([]);
   const [cuadrantes, setCuadrantes] = useState([]);
   const [modelos, setModelos] = useState([]);
   const [defectos, setDefectos] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
+  const [ticket, setTicket] = useState(null);
   const [sessionCount, setSessionCount] = useState(0);
   const [error, setError] = useState('');
 
@@ -46,38 +46,37 @@ export default function NoConformeKioskApp({ onExit }) {
   const cuadrantesDelTipo = useMemo(() => cuadrantes.filter(c => c.tipo_asiento === data.tipoAsiento && c.parte_asiento === data.parteAsiento), [cuadrantes, data.tipoAsiento, data.parteAsiento]);
 
   const resetForm = useCallback(() => {
-    setData({ componente: '', defectoParte: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', cantidad: '1', turno: 'A', origen: 'Producción' });
+    setData({ componente: '', defectoParte: '', tipoAsiento: '', parteAsiento: '', cuadrante: '', modelo: '', turno: 'A', origen: 'Producción' });
+    setTicket(null);
     setStep(1);
   }, []);
 
   const handleSave = useCallback(async () => {
     setError('');
-    const cant = parseInt(data.cantidad);
     if (!data.componente || !data.defectoParte) { setError('Falta componente/defecto'); return; }
-    if (!cant || cant < 1) { setError('Cantidad inválida'); return; }
     setSaving(true);
     try {
       const defectoNombre = `${data.componente} - ${data.defectoParte}`;
       const loteId = crypto.randomUUID();
-      await saveMncEvento({
+      const saved = await saveMncEvento({
         loteId, linea, tipoEvento: 'Generado', resultado: null,
         componente: data.componente, defecto: data.defectoParte, defectoNombre,
         tipoAsiento: data.tipoAsiento, parteAsiento: data.parteAsiento, cuadrante: data.cuadrante, modelo: data.modelo,
-        cantidad: cant, origen: data.origen, turno: data.turno, fecha: todayLocal(),
+        origen: data.origen, turno: data.turno, fecha: todayLocal(),
       });
-      setLastSaved(defectoNombre);
+      setTicket(saved?.ticket_num || null);
       setSessionCount(c => c + 1);
-      resetForm();
+      setStep(6);
     } catch (e) { setError('Error al guardar: ' + e.message); }
     setSaving(false);
-  }, [data, linea, resetForm]);
+  }, [data, linea]);
 
   const wrap = { minHeight: '100vh', display: 'flex', flexDirection: 'column', background: 'linear-gradient(165deg,#121212,#1F1F23 50%,#121212)', padding: 20 };
   const header = (title, backFn) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
       {backFn && <Btn onClick={backFn} style={{ padding: '8px 14px' }}>←</Btn>}
       <h2 style={{ fontSize: 20, fontWeight: 700, color: '#FAFAFA', margin: 0, flex: 1 }}>{title}</h2>
-      {sessionCount > 0 && <span style={{ fontSize: 12, color: '#A1A1AA', fontWeight: 700 }}>✓ {sessionCount} cargados</span>}
+      {sessionCount > 0 && <span style={{ fontSize: 12, color: '#A1A1AA', fontWeight: 700 }}>✓ {sessionCount} cargadas</span>}
       <Btn onClick={onExit} bg="#450A0A" color="#FCA5A5" style={{ fontSize: 11, padding: '6px 12px' }}>Salir</Btn>
     </div>
   );
@@ -85,7 +84,7 @@ export default function NoConformeKioskApp({ onExit }) {
   if (step === 0) return (
     <div style={wrap}>
       {header('Registrar No Conforme', null)}
-      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Material generado en producción — elegí la línea:</p>
+      <p style={{ color: '#A1A1AA', marginBottom: 16, fontSize: 14 }}>Una pieza por registro — elegí la línea:</p>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 14 }}>
         {lineas.map(l => <BigBtn key={l.id} label={l.id} sub={l.nombre} selected={linea === l.id} onClick={() => { setLinea(l.id); setStep(1); }} />)}
       </div>
@@ -95,7 +94,6 @@ export default function NoConformeKioskApp({ onExit }) {
   if (step === 1) return (
     <div style={wrap}>
       {header(`Línea ${linea}`, () => setStep(0))}
-      {lastSaved && <div style={{ background: '#1F1F23', border: '1px solid #3F3F46', color: '#FAFAFA', padding: '10px 14px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>✓ Registrado: {lastSaved}</div>}
       <h3 style={{ fontSize: 14, color: '#B91C1C', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Componente</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(100px,1fr))', gap: 10, marginBottom: 24 }}>
         {componentesUnicos.map(c => <BigBtn key={c} label={c} selected={data.componente === c} onClick={() => setData(p => ({ ...p, componente: c, defectoParte: '' }))} />)}
@@ -146,8 +144,8 @@ export default function NoConformeKioskApp({ onExit }) {
 
   if (step === 4) return (
     <div style={wrap}>
-      {header('Cantidad, Turno y Origen', () => setStep(3))}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+      {header('Turno y Origen', () => setStep(3))}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
         <div>
           <h3 style={{ fontSize: 13, color: '#B91C1C', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Turno</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(70px,1fr))', gap: 8 }}>
@@ -161,10 +159,6 @@ export default function NoConformeKioskApp({ onExit }) {
           </div>
         </div>
       </div>
-      <label style={{ display: 'block', maxWidth: 200, marginBottom: 20 }}>
-        <span style={{ fontSize: 11, color: '#A1A1AA', display: 'block', marginBottom: 6 }}>Cantidad</span>
-        <input type="number" inputMode="numeric" min="1" value={data.cantidad} onChange={e => setData(p => ({ ...p, cantidad: e.target.value }))} style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1px solid #3F3F46', background: '#1F1F23', color: '#FAFAFA', fontSize: 16, fontWeight: 700 }} />
-      </label>
       <Btn bg="#27272A" onClick={() => setStep(5)} style={{ padding: 14 }}>Continuar →</Btn>
     </div>
   );
@@ -181,11 +175,23 @@ export default function NoConformeKioskApp({ onExit }) {
         <Row l="Cuadrante" v={data.cuadrante || '—'} />
         <Row l="Modelo" v={data.modelo || '—'} />
         <Row l="Turno / Origen" v={`${data.turno} / ${data.origen}`} />
-        <Row l="Cantidad" v={data.cantidad} highlight />
       </div>
-      <p style={{ fontSize: 11, color: '#71717A', maxWidth: 480, marginTop: 12 }}>Este material queda pendiente de clasificación en la Sala de No Conforme.</p>
       {error && <div style={{ marginTop: 16, padding: '10px 14px', background: '#450A0A', color: '#FCA5A5', borderRadius: 8, fontSize: 13, maxWidth: 480 }}>{error}</div>}
       <Btn bg="#27272A" onClick={handleSave} disabled={saving} style={{ marginTop: 20, padding: 16, fontSize: 16, maxWidth: 480 }}>{saving ? 'Guardando...' : '✓ Confirmar y Registrar'}</Btn>
+    </div>
+  );
+
+  if (step === 6) return (
+    <div style={wrap}>
+      {header('Pieza Registrada', null)}
+      <div style={{ background: '#1F1F23', borderRadius: 16, padding: 32, border: '2px solid #B91C1C', maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ fontSize: 12, color: '#A1A1AA', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>Escribí este número en una etiqueta y atala a la pieza</div>
+        <div style={{ fontSize: 40, fontWeight: 700, color: '#B91C1C', fontFamily: "'IBM Plex Mono', monospace", letterSpacing: 1 }}>
+          MNC-{linea}-{ticket ?? '?'}
+        </div>
+        <p style={{ fontSize: 12, color: '#71717A', marginTop: 14 }}>La Sala de No Conforme va a buscar este mismo número en su cola.</p>
+      </div>
+      <Btn bg="#27272A" onClick={resetForm} style={{ marginTop: 24, padding: 16, fontSize: 16, maxWidth: 420 }}>+ Registrar otra pieza</Btn>
     </div>
   );
 
