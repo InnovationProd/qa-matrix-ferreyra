@@ -351,6 +351,21 @@ export default function App(){
     const defAntena=dpTotals['Antena']||0;
     const defCustomerPPM=(dpTotals['SCA']||0)+(dpTotals['TDF/TTV']||0)+(dpTotals['Garantía']||0);
     const defIPPM=dpTotals['IPPM']||0;
+    const defAutocontrol=dpTotals['Autocontrol']||0;
+
+    // Eficiencia de Quality Gate por tipo de defecto: sumamos QG e IPPM de todas las voces
+    // que comparten el mismo defecto (aunque estén en distinto cuadrante/modelo).
+    const porDefectoQG={},porDefectoIPPM={};
+    for(const r of qaRows){
+      const qg=(r.dpCounts||{})['Quality Gate']||0, ip=(r.dpCounts||{})['IPPM']||0;
+      if(qg)porDefectoQG[r.defectName]=(porDefectoQG[r.defectName]||0)+qg;
+      if(ip)porDefectoIPPM[r.defectName]=(porDefectoIPPM[r.defectName]||0)+ip;
+    }
+    const defectosQG=new Set([...Object.keys(porDefectoQG),...Object.keys(porDefectoIPPM)]);
+    const eficienciaQG=[...defectosQG].map(def=>{
+      const qg=porDefectoQG[def]||0, ippmC=porDefectoIPPM[def]||0, total=qg+ippmC;
+      return{defecto:def,qg,ippm:ippmC,total,eficiencia:total>0?(qg/total*100):null};
+    }).sort((a,b)=>b.total-a.total);
 
     // Scrap events linked to this giro reclassify part of totalDefects as Scrap / Devolución (not reworked)
     const linkedScrap=scrapEventos.filter(e=>e.giro_id===giroId);
@@ -368,9 +383,10 @@ export default function App(){
     const dppm=pe>0?(defAntena/pe*1000000):null;
     const custPpm=pe>0?(defCustomerPPM/pe*1000000):null;
     const ippm=bc>0?(defIPPM/bc*1000000):null;
+    const ippmReal=bc>0?(defAutocontrol/bc*1000000):null;
     const piezasDia=dt>0?(pt/dt):null;
 
-    return{fpy,rework,scrapRate,scrapQty,scrapUSD,devolQty,reworkQty,dppm,custPpm,ippm,piezasDia,defAntena,defCustomerPPM,defIPPM};
+    return{fpy,rework,scrapRate,scrapQty,scrapUSD,devolQty,reworkQty,dppm,custPpm,ippm,ippmReal,eficienciaQG,piezasDia,defAntena,defCustomerPPM,defIPPM,defAutocontrol};
   },[result,scrapEventos,giroId]);
 
   const kaizenStatus=useMemo(()=>result?calcKaizenStatus(result.qaRows,pdcaMap):null,[result,pdcaMap]);
@@ -1033,12 +1049,30 @@ export default function App(){
               <WcmCard label="Customer DPPM" value={wcmKpis.dppm!=null?Math.round(wcmKpis.dppm).toLocaleString():'—'} color="#B91C1C" sub={`Antena: ${wcmKpis.defAntena} defectos`} />
               <WcmCard label="Customer PPM" value={wcmKpis.custPpm!=null?Math.round(wcmKpis.custPpm).toLocaleString():'—'} color="#B91C1C" sub={`SCA+TDF+Gtía: ${wcmKpis.defCustomerPPM}`} />
               <WcmCard label="Internal PPM" value={wcmKpis.ippm!=null?Math.round(wcmKpis.ippm).toLocaleString():'—'} color="#A1A1AA" sub={`IPPM: ${wcmKpis.defIPPM} defectos`} />
+              <WcmCard label="Internal PPM (Real)" value={wcmKpis.ippmReal!=null?Math.round(wcmKpis.ippmReal).toLocaleString():'—'} color="#A1A1AA" sub={`Autocontrol: ${wcmKpis.defAutocontrol} defectos`} />
               <WcmCard label="COPQ" value="N/D" color="#52525B" sub="Gestión aparte" />
             </div>
           </div>
         ):(
           <div className="no-print" style={{background:'#1F1F23',borderRadius:10,padding:'10px 14px',marginBottom:16,border:'1px dashed #3F3F46',fontSize:12,color:'#71717A'}}>
             ℹ️ Este giro no tiene datos de piezas totales / entregadas cargados — los indicadores WCM (FPY, PPM, etc.) no están disponibles. Se piden al generar un giro nuevo.
+          </div>
+        )}
+        {wcmKpis&&wcmKpis.eficienciaQG.length>0&&(
+          <div style={{background:'#1F1F23',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #3F3F46'}}>
+            <h3 style={{fontSize:12,fontWeight:600,color:'#B91C1C',margin:'0 0 2px',textTransform:'uppercase',letterSpacing:1}}>🎯 Eficiencia Quality Gate (por defecto)</h3>
+            <p style={{fontSize:10,color:'#71717A',margin:'0 0 10px'}}>% de ese defecto atrapado en Quality Gate, contra lo que se escapó hasta IPPM</p>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12}}>
+              {wcmKpis.eficienciaQG.map((e,i)=>(
+                <div key={i}>
+                  <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:3}}>
+                    <span style={{color:'#E4E4E7'}}>{e.defecto}</span>
+                    <span style={{color:e.eficiencia==null?'#71717A':e.eficiencia>=70?'#D4D4D8':e.eficiencia>=40?'#71717A':'#DC2626',fontWeight:700}}>{e.eficiencia!=null?`${e.eficiencia.toFixed(0)}%`:'—'} ({e.qg}/{e.total})</span>
+                  </div>
+                  <div style={{height:6,background:'#3F3F46',borderRadius:2}}><div style={{height:'100%',width:`${e.eficiencia||0}%`,background:e.eficiencia==null?'#3F3F46':e.eficiencia>=70?'#D4D4D8':e.eficiencia>=40?'#71717A':'#DC2626',borderRadius:2}}/></div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
         {kaizenStatus&&(
