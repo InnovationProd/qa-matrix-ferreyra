@@ -601,7 +601,7 @@ export default function App(){
                   {kpi&&<p style={{fontSize:9,color:'#71717A',marginTop:8}}>Acumulado del rango: {kpi.pt.toLocaleString()} totales · {kpi.pe.toLocaleString()} entregadas · {kpi.bc.toLocaleString()} bancos</p>}
                 </div>
 
-                {kpi?(
+                {kpi?(<>
                   <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))',gap:8,marginBottom:16}}>
                     <WcmCard label="FPY" value={kpi.fpy!=null?`${kpi.fpy.toFixed(1)}%`:'—'} color={kpi.fpy>=95?'#D4D4D8':kpi.fpy>=85?'#71717A':'#DC2626'} sub="Sin retrabajo"/>
                     <WcmCard label="Rework" value={kpi.rework!=null?`${kpi.rework.toFixed(1)}%`:'—'} color={kpi.rework<=5?'#D4D4D8':kpi.rework<=15?'#71717A':'#DC2626'} sub="Retrabajo"/>
@@ -609,8 +609,25 @@ export default function App(){
                     <WcmCard label="Cust. DPPM" value={kpi.dppm!=null?Math.round(kpi.dppm).toLocaleString():'—'} color="#B91C1C" sub="Antena"/>
                     <WcmCard label="Cust. PPM" value={kpi.custPpm!=null?Math.round(kpi.custPpm).toLocaleString():'—'} color="#B91C1C" sub="SCA+TDF+Gtía"/>
                     <WcmCard label="Internal PPM" value={kpi.ippm!=null?Math.round(kpi.ippm).toLocaleString():'—'} color="#A1A1AA" sub="IPPM"/>
+                    <WcmCard label="Internal PPM (Real)" value={kpi.ippmReal!=null?Math.round(kpi.ippmReal).toLocaleString():'—'} color="#A1A1AA" sub={`Autocontrol: ${kpi.defAutocontrol} defectos`}/>
                   </div>
-                ):<p style={{color:'#DC2626',fontSize:12,marginBottom:16}}>⚠️ Sin producción cargada para este rango en {L} — cargá los datos arriba.</p>}
+
+                  {kpi.eficienciaQG.length>0&&(
+                    <div style={{background:'#121212',borderRadius:10,padding:14,border:'1px solid #3F3F46',marginBottom:16}}>
+                      <div style={{fontSize:11,color:'#A1A1AA',marginBottom:2,fontWeight:600,textTransform:'uppercase',letterSpacing:1}}>🎯 Eficiencia Quality Gate (por defecto)</div>
+                      <p style={{fontSize:9,color:'#71717A',marginBottom:10}}>% de ese defecto atrapado en Quality Gate, contra lo que se escapó hasta IPPM</p>
+                      {kpi.eficienciaQG.slice(0,8).map((e,i)=>(
+                        <div key={i} style={{marginBottom:7}}>
+                          <div style={{display:'flex',justifyContent:'space-between',fontSize:10,marginBottom:2}}>
+                            <span style={{color:'#E4E4E7'}}>{e.defecto}</span>
+                            <span style={{color:e.eficiencia==null?'#71717A':e.eficiencia>=70?'#D4D4D8':e.eficiencia>=40?'#71717A':'#DC2626',fontWeight:700}}>{e.eficiencia!=null?`${e.eficiencia.toFixed(0)}%`:'—'} ({e.qg}/{e.total})</span>
+                          </div>
+                          <div style={{height:6,background:'#3F3F46',borderRadius:2}}><div style={{height:'100%',width:`${e.eficiencia||0}%`,background:e.eficiencia==null?'#3F3F46':e.eficiencia>=70?'#D4D4D8':e.eficiencia>=40?'#71717A':'#DC2626',borderRadius:2}}/></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>):<p style={{color:'#DC2626',fontSize:12,marginBottom:16}}>⚠️ Sin producción cargada para este rango en {L} — cargá los datos arriba.</p>}
 
                 {(<>
                   <div style={{background:'#121212',borderRadius:10,padding:14,border:'1px solid #3F3F46'}}>
@@ -1116,6 +1133,7 @@ function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
   const defAntena = dpTotals['Antena'] || 0;
   const defCustomerPPM = (dpTotals['SCA'] || 0) + (dpTotals['TDF/TTV'] || 0) + (dpTotals['Garantía'] || 0);
   const defIPPM = dpTotals['IPPM'] || 0;
+  const defAutocontrol = dpTotals['Autocontrol'] || 0;
   const scrapOnly = (scrapEventsInRange || []).filter(e => e.destino === 'Scrap');
   const devolOnly = (scrapEventsInRange || []).filter(e => e.destino === 'Devolución Proveedor');
   const scrapQty = scrapOnly.reduce((s, e) => s + e.cantidad, 0);
@@ -1124,6 +1142,21 @@ function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
   const reworkQty = Math.max(0, defTotal - scrapQty - devolQty);
   const dpu = pt > 0 ? (defTotal / pt) : null;
   const fpyVal = dpu != null ? (Math.exp(-dpu) * 100) : null;
+
+  // Eficiencia de Quality Gate por tipo de defecto: de cada defecto, qué % se atrapó en QG
+  // en vez de escaparse hasta IPPM (QG / (QG + IPPM)).
+  const porDefectoQG = {}, porDefectoIPPM = {};
+  for (const r of (reportes || [])) {
+    if (r.deteccion === 'Quality Gate') porDefectoQG[r.defecto_nombre] = (porDefectoQG[r.defecto_nombre] || 0) + 1;
+    if (r.deteccion === 'IPPM') porDefectoIPPM[r.defecto_nombre] = (porDefectoIPPM[r.defecto_nombre] || 0) + 1;
+  }
+  const defectosQG = new Set([...Object.keys(porDefectoQG), ...Object.keys(porDefectoIPPM)]);
+  const eficienciaQG = [...defectosQG].map(def => {
+    const qg = porDefectoQG[def] || 0, ippm = porDefectoIPPM[def] || 0;
+    const total = qg + ippm;
+    return { defecto: def, qg, ippm, total, eficiencia: total > 0 ? (qg / total * 100) : null };
+  }).sort((a, b) => b.total - a.total);
+
   return {
     fpy: fpyVal,
     rework: fpyVal != null ? (100 - fpyVal) : null,
@@ -1131,7 +1164,9 @@ function calcWcmKpisDateRange(reportes, produccionRows, scrapEventsInRange) {
     dppm: pe > 0 ? (defAntena / pe * 1000000) : null,
     custPpm: pe > 0 ? (defCustomerPPM / pe * 1000000) : null,
     ippm: bc > 0 ? (defIPPM / bc * 1000000) : null,
-    scrapQty, scrapUSD, devolQty, reworkQty, defAntena, defCustomerPPM, defIPPM, defTotal, pt, pe, bc,
+    ippmReal: bc > 0 ? (defAutocontrol / bc * 1000000) : null,
+    eficienciaQG,
+    scrapQty, scrapUSD, devolQty, reworkQty, defAntena, defCustomerPPM, defIPPM, defAutocontrol, defTotal, pt, pe, bc,
   };
 }
 // based on the highest checkbox marked true. Used by both Matriz QA and Dashboard Gerencial.
